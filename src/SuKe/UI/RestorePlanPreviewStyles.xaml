@@ -84,7 +84,7 @@
 
     <Style x:Key="RestorePrimaryButton" TargetType="ui:Button" BasedOn="{StaticResource RestoreSecondaryButton}">
         <Setter Property="Background" Value="{DynamicResource RestoreAccent}"/>
-        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Foreground" Value="{DynamicResource RestoreAccentText}"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -122,6 +122,7 @@
         <Setter Property="CornerRadius" Value="8"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource RestoreHover}"/></Trigger>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="Background" Value="{DynamicResource RestoreHover}"/></Trigger>
         </Style.Triggers>
     </Style>
 </ResourceDictionary>

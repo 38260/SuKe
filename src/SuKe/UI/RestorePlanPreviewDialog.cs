@@ -33,7 +33,7 @@ namespace SuKe.UI;
 internal sealed class RestorePlanPreviewDialog : FluentWindow
 {
     private const double AppIconSize = 28;
-    private const double RowIndent = 30;
+    private const double RowIndent = 42;
 
     private const string ChevronDown = "M 0 0 L 4 4 L 8 0";
     private const string ChevronUp = "M 0 4 L 4 0 L 8 4";
@@ -70,6 +70,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
 
     private readonly CheckBox _selectAll;
     private readonly TextBlock _summaryText;
+    private readonly TextBlock _summaryDetail;
     private readonly StackPanel _noticePanel;
     private readonly Button _primaryButton;
 
@@ -133,9 +134,9 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         root.Children.Add(titleBar);
 
         var body = new Grid { Margin = new Thickness(24, 0, 24, 0) };
-        for (int row = 0; row < 8; row++)
+        for (int row = 0; row < 5; row++)
         {
-            body.RowDefinitions.Add(row == 4
+            body.RowDefinitions.Add(row == 2
                 ? new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }
                 : new RowDefinition { Height = GridLength.Auto });
         }
@@ -169,7 +170,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             if (_updatingSelection) return;
             ApplySelectionToAll(!_allWindowsSelected);
         };
-        Grid.SetRow(_selectAll, 2);
+        Grid.SetRow(_selectAll, 1);
         body.Children.Add(_selectAll);
 
         var list = new StackPanel { Margin = new Thickness(0, 2, 0, 2) };
@@ -197,22 +198,28 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             CornerRadius = new CornerRadius(12), Padding = new Thickness(12, 2, 6, 2),
             Child = scroll,
         };
-        Grid.SetRow(listSurface, 4);
+        Grid.SetRow(listSurface, 2);
         body.Children.Add(listSurface);
 
         _noticePanel = new StackPanel { Margin = new Thickness(0, 4, 0, 4) };
-        Grid.SetRow(_noticePanel, 5);
+        Grid.SetRow(_noticePanel, 3);
         body.Children.Add(_noticePanel);
 
         _summaryText = new TextBlock
         {
-            FontSize = 11.5,
-            Foreground = _secondaryText,
+            FontSize = 14,
+            FontWeight = FontWeights.Medium,
+            Foreground = _primaryText,
             VerticalAlignment = VerticalAlignment.Center,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 12, 0)
         };
         AutomationProperties.SetLiveSetting(_summaryText, AutomationLiveSetting.Polite);
+        _summaryDetail = new TextBlock
+        {
+            FontSize = 12, Foreground = _secondaryText, TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 3, 12, 0),
+        };
 
         _primaryButton = new Button
         {
@@ -254,12 +261,21 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             FontSize = 24,
             FontWeight = FontWeights.SemiBold,
             Foreground = _primaryText,
-            TextTrimming = TextTrimming.CharacterEllipsis
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            ToolTip = _initialPreview.WorkspaceName,
         };
+        Loc.SetSkip(title, true);
         AutomationProperties.SetHeadingLevel(title, AutomationHeadingLevel.Level1);
         header.Children.Add(title);
-        Grid.SetColumn(meta, 1);
-        header.Children.Add(meta);
+        meta.Margin = new Thickness(0);
+        var metaHost = new Border
+        {
+            Background = _expandedBackground, CornerRadius = new CornerRadius(7),
+            Padding = new Thickness(10, 5, 10, 5), Margin = new Thickness(12, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center, Child = meta,
+        };
+        Grid.SetColumn(metaHost, 1);
+        header.Children.Add(metaHost);
         return header;
     }
 
@@ -268,7 +284,12 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         var footer = new Grid { Margin = new Thickness(0, 16, 0, 20) };
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        footer.Children.Add(summary);
+        footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var statistics = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        statistics.Children.Add(summary);
+        statistics.Children.Add(_summaryDetail);
+        footer.Children.Add(statistics);
 
         var buttons = new StackPanel
         {
@@ -297,9 +318,25 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         Grid.SetColumn(buttons, 1);
         footer.Children.Add(buttons);
 
+        void ArrangeFooter()
+        {
+            if (footer.ActualWidth <= 0) return;
+            buttons.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            // 窄窗口或大字号时，按钮另起一行，避免统计与主要操作争抢宽度。
+            bool stacked = footer.ActualWidth < buttons.DesiredSize.Width + summary.FontSize * 14 + 24;
+            Grid.SetColumnSpan(statistics, stacked ? 2 : 1);
+            Grid.SetRow(buttons, stacked ? 1 : 0);
+            Grid.SetColumn(buttons, stacked ? 0 : 1);
+            Grid.SetColumnSpan(buttons, stacked ? 2 : 1);
+            buttons.Margin = stacked ? new Thickness(0, 12, 0, 0) : new Thickness(0);
+        }
+        footer.SizeChanged += (_, _) => ArrangeFooter();
+        primary.SizeChanged += (_, _) => ArrangeFooter();
+        summary.SizeChanged += (_, _) => ArrangeFooter();
+
         var host = new StackPanel();
         host.Children.Add(footer);
-        Grid.SetRow(host, 7);
+        Grid.SetRow(host, 4);
         return host;
     }
 
@@ -309,12 +346,6 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         Background = _dividerBrush,
         Margin = margin
     };
-
-    private static void AddRow(Grid grid, UIElement element, int row)
-    {
-        Grid.SetRow(element, row);
-        grid.Children.Add(element);
-    }
 
     private void AddGroup(StackPanel host, RestorePlanPreviewAppGroup group, ref int tabIndex)
     {
@@ -355,6 +386,12 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
 
         FrameworkElement badge = ApplicationIconHelper.CreateBadge(
             group.ExecutablePath, appName, AppIconSize);
+        if (badge is Border fallback)
+        {
+            fallback.Background = _expandedBackground;
+            fallback.CornerRadius = new CornerRadius(7);
+            if (fallback.Child is TextBlock letter) letter.Foreground = _accent;
+        }
         badge.VerticalAlignment = VerticalAlignment.Center;
         badge.Margin = new Thickness(0, 0, 12, 0);
         AutomationProperties.SetName(badge, $"Application: {appName}");
@@ -368,7 +405,8 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             FontSize = 14,
             FontWeight = FontWeights.SemiBold,
             Foreground = _primaryText,
-            TextTrimming = TextTrimming.CharacterEllipsis
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            ToolTip = appName,
         };
         Loc.SetSkip(name, true);
         texts.Children.Add(name);
@@ -384,6 +422,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             TextTrimming = TextTrimming.CharacterEllipsis
         };
         Loc.SetSkip(subtitle, true);
+        subtitle.ToolTip = primary.WindowTitleLabel;
         texts.Children.Add(subtitle);
         Grid.SetColumn(texts, 2);
         row.Children.Add(texts);
@@ -396,8 +435,14 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             TextAlignment = TextAlignment.Right
         };
         _groupStatuses[group.AppKey] = status;
-        Grid.SetColumn(status, 3);
-        row.Children.Add(status);
+        var statusHost = new Border
+        {
+            CornerRadius = new CornerRadius(6), Padding = new Thickness(7, 4, 7, 4),
+            VerticalAlignment = VerticalAlignment.Center, Child = status,
+        };
+        status.Margin = new Thickness(0);
+        Grid.SetColumn(statusHost, 3);
+        row.Children.Add(statusHost);
 
         var chevron = new Path
         {
@@ -419,13 +464,19 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             Height = 32,
             Padding = new Thickness(0),
             MinWidth = 0,
-            Focusable = false,
+            Focusable = true,
             Cursor = Cursors.Hand,
             TabIndex = tabIndex++,
             ToolTip = Loc.T("Expand")
         };
-        AutomationProperties.SetName(toggle, $"Expand or collapse {appName}");
+        AutomationProperties.SetName(toggle, Loc.Format("Expand or collapse {0}", appName));
         toggle.Click += (_, _) => ExpandGroup(group, !_groupExpanded.Contains(group.AppKey));
+        texts.Cursor = Cursors.Hand;
+        texts.MouseLeftButtonUp += (_, e) =>
+        {
+            ExpandGroup(group, !_groupExpanded.Contains(group.AppKey));
+            e.Handled = true;
+        };
         Grid.SetColumn(toggle, 4);
         row.Children.Add(toggle);
 
@@ -564,12 +615,14 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         {
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
-            TextAlignment = TextAlignment.Right
+            TextAlignment = TextAlignment.Right,
+            Margin = new Thickness(0, 0, 27, 0),
         };
         _entryStatuses[entry.EntryIndex] = status;
         Grid.SetColumn(status, 2);
         row.Children.Add(status);
-        return row;
+        title.ToolTip = title.Text;
+        return new Border { Style = (Style)Resources["RestoreRow"], Child = row };
     }
 
     // ── Details ──────────────────────────────────────────────────────────────────────────────
@@ -840,9 +893,11 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         }
         int selectedCount = restorable + running + blocked;
 
-        _summaryText.Text = Loc.Format(
+        _summaryText.Text = Loc.Format("Selected {0} windows", selectedCount);
+        _summaryDetail.Text = Loc.Format("Restoring {0} · skipping {1} already running", restorable, running);
+        AutomationProperties.SetName(_summaryText, Loc.Format(
             "Selected {0} windows · restoring {1} · skipping {2} already running",
-            selectedCount, restorable, running);
+            selectedCount, restorable, running));
         _primaryButton.Content = _isPreviewOnly
             ? Loc.T("Close preview")
             : Loc.Format(
@@ -859,8 +914,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         bool selected = _entryControls.TryGetValue(entry.EntryIndex, out CheckBox? control) &&
             control.IsEnabled && control.IsChecked == true;
         (string text, Brush brush) = DescribeEntry(entry, selected);
-        status.Text = text;
-        status.Foreground = brush;
+        SetStatus(status, text, brush, entry.KeepRunning);
     }
 
     private (string Text, Brush Brush) DescribeEntry(RestorePlanPreviewEntry entry, bool selected)
@@ -899,8 +953,24 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
                         : group.WindowCount == 1
                             ? (Loc.T("To restore"), _accent)
                             : (Loc.Format("Restore {0} · skip {1}", restorable, running), _accent);
-        status.Text = text;
-        status.Foreground = brush;
+        SetStatus(status, text, brush, selectedCount > 0 && restorable == 0 && blocked == 0);
+    }
+
+    private void SetStatus(TextBlock status, string text, Brush brush, bool running)
+    {
+        status.Inlines.Clear();
+        if (running)
+        {
+            status.Inlines.Add(new System.Windows.Documents.Run("● ") { Foreground = _runningColor, FontSize = 9 });
+            status.Inlines.Add(new System.Windows.Documents.Run(text.Replace("● ", "")) { Foreground = _secondaryText });
+        }
+        else
+        {
+            status.Text = text;
+            status.Foreground = brush;
+        }
+        if (status.Parent is Border badge)
+            badge.Background = ReferenceEquals(brush, _accent) ? _expandedBackground : Brushes.Transparent;
     }
 
     private void RenderNotices(RestorePlanPreview projection, int blocked)
@@ -1023,6 +1093,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             Source = new Uri("pack://application:,,,/SuKe;component/UI/RestorePlanPreviewStyles.xaml"),
         });
         Resources["RestoreAccent"] = _accent;
+        Resources["RestoreAccentText"] = dark ? Solid("#171023") : Brushes.White;
         Resources["RestoreAccentHover"] = Solid(dark ? "#A78BF9" : "#8061E9");
         Resources["RestoreAccentPressed"] = Solid(dark ? "#8362DC" : "#5D3BCB");
         Resources["RestoreSurface"] = Solid(dark ? "#27262F" : "#FFFFFF");
@@ -1047,7 +1118,9 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
 
     private FrameworkElement NoticeLine(string text, Brush brush)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.Children.Add(new System.Windows.Shapes.Ellipse
         {
             Width = 6,
@@ -1056,14 +1129,16 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 7, 0)
         });
-        row.Children.Add(new TextBlock
+        var message = new TextBlock
         {
             Text = text,
-            FontSize = 10.5,
+            FontSize = 12,
             Foreground = brush,
             TextWrapping = TextWrapping.Wrap
-        });
-        return new Border { Margin = new Thickness(0, 1, 0, 1), Child = row };
+        };
+        Grid.SetColumn(message, 1);
+        row.Children.Add(message);
+        return new Border { Margin = new Thickness(0, 3, 0, 3), Padding = new Thickness(4, 4, 4, 4), Child = row };
     }
 
     /// <summary>

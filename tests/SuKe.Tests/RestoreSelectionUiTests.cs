@@ -30,10 +30,7 @@ public class RestoreSelectionUiTests
                 string text = TextContent(dialog);
                 Assert.Contains(Loc.Format("{0} apps · {1} windows", 8, 10), text);
                 Assert.Contains(Loc.Format("Restore {0} · skip {1}", 2, 1), text);
-                Assert.Contains(
-                    Loc.Format("Selected {0} windows · restoring {1} · skipping {2} already running",
-                        10, 5, 5),
-                    text);
+                AssertSummary(dialog, 10, 5, 5);
                 Assert.Equal(Loc.Format("Restore {0} windows", 5), Primary(dialog).Content);
                 Assert.True(Primary(dialog).IsEnabled);
             }
@@ -61,10 +58,7 @@ public class RestoreSelectionUiTests
                 windows[0].IsChecked = false;
                 Assert.Null(chrome.IsChecked);
                 Assert.Null(master.IsChecked);
-                Assert.Contains(
-                    Loc.Format("Selected {0} windows · restoring {1} · skipping {2} already running",
-                        9, 4, 5),
-                    TextContent(dialog));
+                AssertSummary(dialog, 9, 4, 5);
                 Assert.Equal(Loc.Format("Restore {0} windows", 4), Primary(dialog).Content);
 
                 foreach (CheckBox window in windows) window.IsChecked = false;
@@ -107,10 +101,7 @@ public class RestoreSelectionUiTests
                 Assert.All(WindowChecks(dialog), check => Assert.Equal(Visibility.Visible,
                     AncestorVisibility(check)));
                 Assert.Equal(states, WindowChecks(dialog).Select(check => check.IsChecked == true));
-                Assert.Contains(
-                    Loc.Format("Selected {0} windows · restoring {1} · skipping {2} already running",
-                        10, 5, 5),
-                    TextContent(dialog));
+                AssertSummary(dialog, 10, 5, 5);
             }
             finally { dialog.Close(); }
         });
@@ -139,7 +130,7 @@ public class RestoreSelectionUiTests
         SmoothScrollUiTests.RunSta(() =>
         {
             RestorePlanEntry running = RunningEntry(0, "Code", @"C:\Apps\Code.exe", "项目 A");
-            RestorePlanPreviewDialog dialog = Open(new RestorePlan
+            RestorePlanPreviewDialog dialog = Prepare(new RestorePlan
             {
                 Mode = RestoreModeKind.Resume, Entries = [running], Actions = running.Actions,
             });
@@ -156,16 +147,25 @@ public class RestoreSelectionUiTests
                         Assert.True(group.IsChecked);
                         Assert.Contains(Loc.T("Already running · skipped"), TextContent(dialog));
 
-                        Click(group);
+                        var peer = new System.Windows.Automation.Peers.CheckBoxAutomationPeer(group);
+                        var toggle = Assert.IsAssignableFrom<System.Windows.Automation.Provider.IToggleProvider>(
+                            peer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Toggle));
+                        toggle.Toggle();
                         Assert.False(group.IsChecked);
 
-                        Click(group);
-                        Assert.True(dialog.ShowDialog());
-                        Assert.True(Assert.Single(dialog.ApprovedPlan!.Entries).KeepRunning);
-                        Assert.Empty(dialog.ApprovedPlan.Actions);
+                        toggle.Toggle();
+                        Assert.True(Primary(dialog).IsEnabled);
+                        Click(Primary(dialog));
                     }
-                    finally { dialog.Close(); owner.Close(); }
+                    catch { dialog.Close(); throw; }
                 }));
+            try
+            {
+                Assert.True(dialog.ShowDialog());
+                Assert.True(Assert.Single(dialog.ApprovedPlan!.Entries).KeepRunning);
+                Assert.Empty(dialog.ApprovedPlan.Actions);
+            }
+            finally { dialog.Close(); owner.Close(); }
         });
     }
 
@@ -197,10 +197,7 @@ public class RestoreSelectionUiTests
             try
             {
                 string text = TextContent(dialog);
-                Assert.Contains(
-                    Loc.Format("Selected {0} windows · restoring {1} · skipping {2} already running",
-                        2, 1, 0),
-                    text);
+                AssertSummary(dialog, 2, 1, 0);
                 Assert.Contains(Loc.T("Not restorable"), text);
                 // A blocking entry keeps the approval disabled until it is cleared.
                 Assert.False(Primary(dialog).IsEnabled);
@@ -209,17 +206,72 @@ public class RestoreSelectionUiTests
                 GroupChecks(dialog).Single(check =>
                     AutomationProperties.GetName(check)!.Contains("Doc", StringComparison.Ordinal))
                     .IsChecked = false;
-                Assert.Contains(
-                    Loc.Format("Selected {0} windows · restoring {1} · skipping {2} already running",
-                        1, 1, 0),
-                    TextContent(dialog));
+                AssertSummary(dialog, 1, 1, 0);
                 Assert.True(Primary(dialog).IsEnabled);
             }
             finally { dialog.Close(); }
         });
     }
 
+    [Theory]
+    [InlineData(740, 820, 1.0)]
+    [InlineData(740, 820, 1.5)]
+    [InlineData(600, 520, 1.0)]
+    [InlineData(600, 520, 1.5)]
+    public void Footer_and_long_titles_remain_usable_at_small_sizes_and_large_text(double width, double height, double scale)
+    {
+        SmoothScrollUiTests.RunSta(() =>
+        {
+            RestorePlan plan = ReferencePlan() with { WorkspaceName = "用于检查最小窗口和大字号下长标题截断的开发工作区名称" };
+            RestorePlanPreviewDialog dialog = Prepare(plan);
+            dialog.Width = width;
+            dialog.Height = height;
+            try
+            {
+                dialog.Show();
+                SmoothScrollUiTests.Pump(40);
+                foreach (TextBlock block in ActivityDetailsUiTests.Walk(dialog).OfType<TextBlock>()) block.FontSize *= scale;
+                foreach (WpfButton button in ActivityDetailsUiTests.Walk(dialog).OfType<WpfButton>()) button.FontSize *= scale;
+                dialog.UpdateLayout();
+                SmoothScrollUiTests.Pump(60);
+                WpfButton primary = Primary(dialog);
+                WpfButton cancel = ActivityDetailsUiTests.Walk(dialog).OfType<WpfButton>().Single(button => button.IsCancel);
+                TextBlock summary = ActivityDetailsUiTests.Walk(dialog).OfType<TextBlock>().Single(block => block.Text == Loc.Format("Selected {0} windows", 10));
+                TextBlock detail = ActivityDetailsUiTests.Walk(dialog).OfType<TextBlock>().Single(block => block.Text == Loc.Format("Restoring {0} · skipping {1} already running", 5, 5));
+                Rect primaryBounds = Bounds(primary, dialog), cancelBounds = Bounds(cancel, dialog);
+                Rect summaryBounds = Bounds(summary, dialog), detailBounds = Bounds(detail, dialog);
+                Assert.True(primaryBounds.Right <= dialog.ActualWidth - 16 && primaryBounds.Bottom <= dialog.ActualHeight - 12);
+                Assert.True(cancelBounds.Right + 7 <= primaryBounds.Left);
+                Assert.True(primary.ActualHeight >= 40);
+                Assert.True(detailBounds.Bottom <= primaryBounds.Top + 1 || Math.Max(summaryBounds.Right, detailBounds.Right) + 8 <= cancelBounds.Left,
+                    "Footer statistics overlap action buttons.");
+                Assert.Contains(ActivityDetailsUiTests.Walk(dialog).OfType<ScrollViewer>(), viewer => viewer.ActualHeight > 80);
+                var heading = ActivityDetailsUiTests.Walk(dialog).OfType<TextBlock>().Single(block => Equals(block.ToolTip, plan.WorkspaceName));
+                Assert.Equal(TextTrimming.CharacterEllipsis, heading.TextTrimming);
+                Assert.True(heading.ActualWidth > 40 && Bounds(heading, dialog).Right <= dialog.ActualWidth - 16);
+                CheckBox check = GroupChecks(dialog)[0];
+                var box = Assert.IsType<Border>(check.Template.FindName("Box", check));
+                Assert.Equal(Assert.IsType<SolidColorBrush>(primary.Background).Color, Assert.IsType<SolidColorBrush>(box.Background).Color);
+                Assert.True(Toggle(dialog, "Chrome").Focusable);
+                AssertSummary(dialog, 10, 5, 5);
+            }
+            finally { dialog.Close(); }
+        });
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────────────────
+
+    private static Rect Bounds(FrameworkElement element, Window window) =>
+        element.TransformToAncestor(window).TransformBounds(new Rect(element.RenderSize));
+
+    private static void AssertSummary(RestorePlanPreviewDialog dialog, int selected, int restorable, int running)
+    {
+        string text = TextContent(dialog);
+        Assert.Contains(Loc.Format("Selected {0} windows", selected), text);
+        Assert.Contains(Loc.Format("Restoring {0} · skipping {1} already running", restorable, running), text);
+        Assert.Contains(ActivityDetailsUiTests.Walk(dialog).OfType<TextBlock>(), block =>
+            AutomationProperties.GetName(block) == Loc.Format("Selected {0} windows · restoring {1} · skipping {2} already running", selected, restorable, running));
+    }
 
     private static RestorePlanPreviewDialog Prepare(RestorePlan plan)
     {
@@ -279,7 +331,8 @@ public class RestoreSelectionUiTests
         button.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
 
     internal static string TextContent(DependencyObject root) => string.Join("\n",
-        ActivityDetailsUiTests.Walk(root).OfType<TextBlock>().Select(text => text.Text));
+        ActivityDetailsUiTests.Walk(root).OfType<TextBlock>().Select(text =>
+            new System.Windows.Documents.TextRange(text.ContentStart, text.ContentEnd).Text));
 
     private static Visibility AncestorVisibility(DependencyObject element)
     {

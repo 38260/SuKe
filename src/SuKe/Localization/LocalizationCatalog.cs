@@ -379,6 +379,8 @@ internal static partial class LocalizationCatalog
         Add(entries, "Restore {0} · {1} not restorable", "恢复 {0} 个 · {1} 个无法恢复");
         Add(entries, "Selected {0} windows · restoring {1} · skipping {2} already running",
             "已选 {0} 个窗口 · 将恢复 {1} 个 · 已运行跳过 {2} 个");
+        Add(entries, "Selected {0} windows", "已选 {0} 个窗口");
+        Add(entries, "Restoring {0} · skipping {1} already running", "将恢复 {0} 个 · 已运行跳过 {1} 个");
         Add(entries, "Restore {0} windows", "恢复 {0} 个窗口");
         Add(entries, "Switch {0} windows", "切换 {0} 个窗口");
         Add(entries, "Show match details", "显示匹配详情");
