@@ -797,6 +797,7 @@ internal static partial class LocalizationCatalog
         Add(entries, "Untitled window", "无标题窗口");
         Add(entries, "Workspace entry", "工作区条目");
         Add(entries, "Application", "应用");
+        Add(entries, "Application: {0}", "应用：{0}");
     }
 
     // ── Restore plan explanations, warnings and blocking errors ───────────────────────────────

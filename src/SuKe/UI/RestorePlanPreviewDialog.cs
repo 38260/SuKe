@@ -21,6 +21,9 @@ namespace SuKe.UI;
 /// </summary>
 internal sealed class RestorePlanPreviewDialog : FluentWindow
 {
+    /// <summary>Application badge size; large enough to be recognizable, small enough to stay inline.</summary>
+    private const double EntryBadgeSize = 22;
+
     private RestorePlan _workingPlan;
     private readonly Dictionary<int, System.Windows.Controls.CheckBox> _entryControls = new();
     private readonly Wpf.Ui.Controls.Button _restoreButton;
@@ -299,6 +302,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         _entryCards[entry.EntryIndex] = card;
         var row = new Grid();
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         var checkBox = new System.Windows.Controls.CheckBox
@@ -317,6 +321,19 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         checkBox.Unchecked += (_, _) => RefreshApprovalState();
         _entryControls[entry.EntryIndex] = checkBox;
         row.Children.Add(checkBox);
+
+        // The badge identifies the app at a glance; entries are otherwise only told apart by
+        // window titles, which look alike when one app holds several windows.
+        string appLabel = Loc.TLabel(entry.AppLabel);
+        FrameworkElement badge = ApplicationIconHelper.CreateBadge(
+            entry.ExecutablePath,
+            appLabel,
+            EntryBadgeSize);
+        badge.VerticalAlignment = VerticalAlignment.Top;
+        badge.Margin = new Thickness(0, 1, 10, 0);
+        AutomationProperties.SetName(badge, Loc.Format("Application: {0}", appLabel));
+        Grid.SetColumn(badge, 1);
+        row.Children.Add(badge);
 
         var details = new StackPanel();
         var header = new Grid();
@@ -364,7 +381,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         _entryActionPanels[entry.EntryIndex] = actionPanel;
         details.Children.Add(actionPanel);
 
-        Grid.SetColumn(details, 1);
+        Grid.SetColumn(details, 2);
         row.Children.Add(details);
         card.Child = row;
         AutomationProperties.SetName(card, Loc.T(entry.AccessibilityLabel));

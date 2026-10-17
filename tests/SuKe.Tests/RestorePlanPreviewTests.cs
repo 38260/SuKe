@@ -281,6 +281,65 @@ public class RestorePlanPreviewTests
         Assert.True(Assert.Single(resolvedEntry.Candidates).IsSelected);
     }
 
+    [Fact]
+    public void Preview_projects_the_application_badge_identity_used_to_recognize_an_entry()
+    {
+        RestorePlanEntry named = Entry(
+            0,
+            RestorePlanEntryOutcome.Matched,
+            Placement(),
+            Candidate(10, WindowMatchConfidence.Exact),
+            actions: [Move(0, 10)]) with
+        {
+            SavedIdentity = new SavedWindowIdentity
+            {
+                EntryId = "entry-0",
+                ProcessName = "Code",
+                ExecutablePath = @"C:\Apps\VSCode\Code.exe",
+                Title = "Window 0"
+            }
+        };
+        RestorePlanEntry executableOnly = Entry(
+            1,
+            RestorePlanEntryOutcome.Matched,
+            Placement(),
+            Candidate(11, WindowMatchConfidence.Exact),
+            actions: [Move(1, 11)]) with
+        {
+            SavedIdentity = new SavedWindowIdentity
+            {
+                EntryId = "entry-1",
+                ExecutablePath = @"C:\Apps\Figma.exe",
+                Title = "Window 1"
+            }
+        };
+        RestorePlanEntry anonymous = Entry(
+            2,
+            RestorePlanEntryOutcome.Matched,
+            Placement(),
+            Candidate(12, WindowMatchConfidence.Exact),
+            actions: [Move(2, 12)]) with
+        {
+            SavedIdentity = new SavedWindowIdentity { EntryId = "entry-2", Title = "Window 2" }
+        };
+        var plan = new RestorePlan
+        {
+            WorkspaceName = "Badge fixture",
+            Entries = [named, executableOnly, anonymous],
+            Actions = named.Actions.Concat(executableOnly.Actions).Concat(anonymous.Actions).ToArray()
+        };
+
+        RestorePlanPreview preview = RestorePlanPreviewBuilder.Build(plan);
+
+        Assert.Equal(
+            [@"C:\Apps\VSCode\Code.exe", @"C:\Apps\Figma.exe", ""],
+            preview.Entries.Select(entry => entry.ExecutablePath));
+        // The badge must identify the app, never the window title, or two windows of one app
+        // would show different letters.
+        Assert.Equal(["Code", "Figma", "Application"], preview.Entries.Select(entry => entry.AppLabel));
+        Assert.All(preview.Entries, entry => Assert.DoesNotContain("Window", entry.AppLabel));
+    }
+
     private static RestorePlanEntry BrowserEntry(int index, RestoreAction action) => new(
         index,
         $"browser-{index}",

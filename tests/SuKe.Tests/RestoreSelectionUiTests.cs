@@ -68,6 +68,60 @@ public class RestoreSelectionUiTests
     }
 
     [Fact]
+    public void Entry_cards_show_one_application_badge_each_and_fall_back_to_a_letter()
+    {
+        SmoothScrollUiTests.RunSta(() =>
+        {
+            string notepad = Path.Combine(Environment.SystemDirectory, "notepad.exe");
+            RestorePlanEntry known = Entry(0, RestorePlanEntryOutcome.Matched) with
+            {
+                SavedIdentity = new SavedWindowIdentity
+                {
+                    EntryId = "entry-0", ProcessName = "notepad", ExecutablePath = notepad,
+                    Title = "Untitled - Notepad"
+                }
+            };
+            RestorePlanEntry unknown = Entry(1, RestorePlanEntryOutcome.Matched) with
+            {
+                SavedIdentity = new SavedWindowIdentity
+                {
+                    EntryId = "entry-1", ProcessName = "ghost",
+                    ExecutablePath = @"Z:\does-not-exist\ghost.exe", Title = "Ghost window"
+                }
+            };
+            var dialog = new RestorePlanPreviewDialog(new RestorePlan
+            {
+                Mode = RestoreModeKind.Resume,
+                Entries = [known, unknown],
+                Actions = known.Actions.Concat(unknown.Actions).ToArray()
+            });
+            dialog.Resources.MergedDictionaries.Add(ActivityDetailsUiTests.Resources());
+            try
+            {
+                dialog.Show();
+                SmoothScrollUiTests.Pump(30);
+
+                FrameworkElement[] badges = ActivityDetailsUiTests.Walk(dialog)
+                    .OfType<FrameworkElement>()
+                    .Where(element => BadgeName(element).EndsWith("notepad", StringComparison.Ordinal) ||
+                        BadgeName(element).EndsWith("ghost", StringComparison.Ordinal))
+                    .ToArray();
+
+                Assert.Equal(2, badges.Length);
+                // A resolvable executable draws the real shell icon, frozen so every row can share it.
+                var icon = Assert.IsType<Image>(badges[0]);
+                Assert.True(Assert.IsAssignableFrom<System.Windows.Media.Imaging.BitmapSource>(icon.Source).IsFrozen);
+                Assert.Equal("notepad", icon.ToolTip);
+                // A missing executable still identifies itself by letter instead of an empty box.
+                var letter = Assert.IsType<Border>(badges[1]);
+                Assert.Equal("G", Assert.IsType<TextBlock>(letter.Child).Text);
+                Assert.Equal("ghost", letter.ToolTip);
+            }
+            finally { dialog.Close(); }
+        });
+    }
+
+    [Fact]
     public void Selected_running_item_can_be_toggled_and_approved_as_skipped()
     {
         SmoothScrollUiTests.RunSta(() =>
@@ -115,6 +169,10 @@ public class RestoreSelectionUiTests
         .OfType<CheckBox>().Where(check => check.Tag is int).OrderBy(check => (int)check.Tag).ToArray();
 
     internal static void Click(CheckBox check) => check.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+
+    /// <summary>Automation name of a badge, or an empty string for everything else in the card.</summary>
+    private static string BadgeName(FrameworkElement element) =>
+        AutomationProperties.GetName(element) ?? "";
 
     internal static RestorePlan Plan()
     {

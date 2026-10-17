@@ -72,6 +72,15 @@ public sealed record RestorePlanPreviewEntry(
 {
     public string PolicyLabel { get; init; } = "Workspace mode default";
     public bool KeepRunning { get; init; }
+
+    /// <summary>
+    /// Executable that owns the saved window, used to draw the application badge. Empty for
+    /// packaged or web apps that have no file path, in which case the badge falls back to a letter.
+    /// </summary>
+    public string ExecutablePath { get; init; } = "";
+
+    /// <summary>Short application name for the badge tooltip and its letter fallback.</summary>
+    public string AppLabel { get; init; } = "";
 }
 
 /// <summary>
@@ -203,7 +212,23 @@ public static class RestorePlanPreviewBuilder
         {
             PolicyLabel = RestorePolicyResolver.Label(entry.RestorePolicy),
             KeepRunning = entry.KeepRunning,
+            ExecutablePath = entry.SavedIdentity.ExecutablePath,
+            AppLabel = ApplicationLabel(entry.SavedIdentity)
         };
+    }
+
+    /// <summary>
+    /// Short application name shown on the badge. Deliberately never the window title: the badge
+    /// identifies the app, so two windows of the same app always share one letter fallback.
+    /// </summary>
+    private static string ApplicationLabel(SavedWindowIdentity identity)
+    {
+        if (!string.IsNullOrWhiteSpace(identity.ProcessName)) return identity.ProcessName;
+        string fileName = Path.GetFileNameWithoutExtension(identity.ExecutablePath);
+        if (!string.IsNullOrWhiteSpace(fileName)) return fileName;
+        if (!string.IsNullOrWhiteSpace(identity.AppUserModelId))
+            return identity.AppUserModelId.Split('!', 2)[0].Split('_')[0];
+        return "Application";
     }
 
     private static RestorePreviewOutcomeKind Classify(RestorePlanEntry entry)
