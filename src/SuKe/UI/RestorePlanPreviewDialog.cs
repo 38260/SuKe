@@ -32,8 +32,8 @@ namespace SuKe.UI;
 /// </remarks>
 internal sealed class RestorePlanPreviewDialog : FluentWindow
 {
-    private const double AppIconSize = 20;
-    private const double RowIndent = 26;
+    private const double AppIconSize = 28;
+    private const double RowIndent = 30;
 
     private const string ChevronDown = "M 0 0 L 4 4 L 8 0";
     private const string ChevronUp = "M 0 4 L 4 0 L 8 4";
@@ -87,25 +87,29 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         _isPreviewOnly = previewPlan.Mode == RestoreModeKind.PreviewOnly;
 
         bool dark = PrefersDarkPalette();
-        _accent = Solid(dark ? "#A98BFF" : "#6C4FE8");
-        _expandedBackground = Solid(dark ? "#232323" : "#F7F7FA");
+        _accent = Solid(dark ? "#9675F5" : "#7050DF");
+        _expandedBackground = Solid(dark ? "#292733" : "#F7F6FC");
         _runningColor = Solid(dark ? "#5FD08A" : "#1F8A4C");
         _blockedColor = Solid(dark ? "#FF99A4" : "#C42B1C");
         _cautionColor = Resource("SystemFillColorCautionBrush", Solid(dark ? "#F0B354" : "#9A5B00"));
-        _dividerBrush = Resource("DividerStrokeColorDefaultBrush",
-            Resource("CardStrokeColorDefaultBrush", Brushes.Gainsboro));
-        _secondaryText = Resource("TextFillColorSecondaryBrush", Brushes.DimGray);
-        _tertiaryText = Resource("TextFillColorTertiaryBrush", Brushes.Gray);
-        _primaryText = Resource("TextFillColorPrimaryBrush", Brushes.Black);
+        _dividerBrush = Solid(dark ? "#363540" : "#EBEBF2");
+        _secondaryText = Solid(dark ? "#B9B6C5" : "#666575");
+        _tertiaryText = Solid(dark ? "#9995A7" : "#858291");
+        _primaryText = Solid(dark ? "#F2F0F7" : "#242232");
 
         _initialPreview = RestorePlanPreviewBuilder.Build(PrepareRestorePlan(_workingPlan));
         _groups = _initialPreview.Groups;
 
         Title = Loc.Format("Restore \"{0}\"", _initialPreview.WorkspaceName);
-        Width = 620;
-        Height = 700;
-        MinWidth = 520;
-        MinHeight = 440;
+        Width = 740;
+        Height = Math.Min(820, SystemParameters.WorkArea.Height - 48);
+        MinWidth = 600;
+        MinHeight = 520;
+        FontFamily = new FontFamily("Segoe UI, Microsoft YaHei UI");
+        Background = Solid(dark ? "#222129" : "#FAFAFD");
+        Foreground = _primaryText;
+        UseLayoutRounding = true;
+        SnapsToDevicePixels = true;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ExtendsContentIntoTitleBar = true;
         ShowInTaskbar = false;
@@ -128,7 +132,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         Grid.SetRow(titleBar, 0);
         root.Children.Add(titleBar);
 
-        var body = new Grid { Margin = new Thickness(20, 0, 20, 0) };
+        var body = new Grid { Margin = new Thickness(24, 0, 24, 0) };
         for (int row = 0; row < 8; row++)
         {
             body.RowDefinitions.Add(row == 4
@@ -141,7 +145,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         var headerMeta = new TextBlock
         {
             Text = Loc.Format("{0} apps · {1} windows", _initialPreview.AppCount, _initialPreview.WindowCount),
-            FontSize = 11.5,
+            FontSize = 12,
             Foreground = _secondaryText,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(12, 4, 0, 0)
@@ -151,16 +155,15 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             Loc.Format("{0} applications, {1} saved windows",
                 _initialPreview.AppCount, _initialPreview.WindowCount));
         body.Children.Add(BuildHeader(headerMeta));
-        AddRow(body, Divider(new Thickness(-20, 0, -20, 0)), 1);
 
         _selectAll = new CheckBox
         {
             Content = Loc.T("Select all windows"),
             IsThreeState = true,
             FontSize = 13,
-            Margin = new Thickness(0, 9, 0, 9)
+            Margin = new Thickness(12, 0, 0, 12)
         };
-        AutomationProperties.SetName(_selectAll, "Select all restore entries");
+        AutomationProperties.SetName(_selectAll, Loc.T("Select all restore entries"));
         _selectAll.Click += (_, _) =>
         {
             if (_updatingSelection) return;
@@ -168,9 +171,8 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         };
         Grid.SetRow(_selectAll, 2);
         body.Children.Add(_selectAll);
-        AddRow(body, Divider(new Thickness(-20, 0, -20, 0)), 3);
 
-        var list = new StackPanel { Margin = new Thickness(0, 4, 0, 6) };
+        var list = new StackPanel { Margin = new Thickness(0, 2, 0, 2) };
         int tabIndex = 0;
         foreach (RestorePlanPreviewAppGroup group in _groups)
         {
@@ -188,13 +190,19 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             Padding = new Thickness(0, 0, 6, 0)
         };
         AutomationProperties.SetName(scroll, Loc.T("Restore plan entries"));
-        Grid.SetRow(scroll, 4);
-        body.Children.Add(scroll);
+        var listSurface = new Border
+        {
+            Background = Resources["RestoreSurface"] as Brush,
+            BorderBrush = _dividerBrush, BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(12), Padding = new Thickness(12, 2, 6, 2),
+            Child = scroll,
+        };
+        Grid.SetRow(listSurface, 4);
+        body.Children.Add(listSurface);
 
         _noticePanel = new StackPanel { Margin = new Thickness(0, 4, 0, 4) };
         Grid.SetRow(_noticePanel, 5);
         body.Children.Add(_noticePanel);
-        AddRow(body, Divider(new Thickness(-20, 0, -20, 0)), 6);
 
         _summaryText = new TextBlock
         {
@@ -210,9 +218,8 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         {
             Appearance = ControlAppearance.Primary,
             IsDefault = true,
-            MinWidth = 110,
-            MinHeight = 32,
-            Padding = new Thickness(14, 6, 14, 6),
+            Style = (Style)Resources["RestorePrimaryButton"],
+            MinWidth = 136,
             TabIndex = tabIndex + 1
         };
         AutomationProperties.SetName(
@@ -237,14 +244,14 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
 
     private FrameworkElement BuildHeader(TextBlock meta)
     {
-        var header = new Grid { Margin = new Thickness(0, 12, 0, 10) };
+        var header = new Grid { Margin = new Thickness(0, 16, 0, 18) };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var title = new TextBlock
         {
             Text = Loc.Format("Restore \"{0}\"", _initialPreview.WorkspaceName),
-            FontSize = 21,
+            FontSize = 24,
             FontWeight = FontWeights.SemiBold,
             Foreground = _primaryText,
             TextTrimming = TextTrimming.CharacterEllipsis
@@ -258,7 +265,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
 
     private FrameworkElement BuildFooter(TextBlock summary, Button primary, int tabIndex)
     {
-        var footer = new Grid { Margin = new Thickness(0, 10, 0, 14) };
+        var footer = new Grid { Margin = new Thickness(0, 16, 0, 20) };
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         footer.Children.Add(summary);
@@ -273,9 +280,8 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             Content = Loc.T("Cancel"),
             Appearance = ControlAppearance.Secondary,
             IsCancel = true,
-            MinWidth = 76,
-            MinHeight = 32,
-            Padding = new Thickness(14, 6, 14, 6),
+            Style = (Style)Resources["RestoreSecondaryButton"],
+            MinWidth = 86,
             Margin = new Thickness(0, 0, 8, 0),
             TabIndex = tabIndex,
             Visibility = _isPreviewOnly ? Visibility.Collapsed : Visibility.Visible
@@ -316,7 +322,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         string appName = ApplicationNameHelper.DisplayName(group.ExecutablePath, group.AppLabel);
         RestorePlanPreviewEntry primary = group.Entries[0];
 
-        var row = new Grid { MinHeight = 34, Background = Brushes.Transparent };
+        var row = new Grid { MinHeight = 50, Background = Brushes.Transparent };
         for (int column = 0; column < 5; column++)
         {
             row.ColumnDefinitions.Add(column == 2
@@ -330,11 +336,11 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             IsChecked = primary.IsInitiallyEnabled,
             IsEnabled = IsSelectable(primary),
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0),
+            Margin = new Thickness(0, 0, 12, 0),
             TabIndex = tabIndex++,
             Tag = primary.EntryIndex
         };
-        AutomationProperties.SetName(check, $"Include every {appName} window");
+        AutomationProperties.SetName(check, Loc.Format("Include every {0} window", appName));
         check.Checked += (_, _) => RefreshFromUserSelection();
         check.Unchecked += (_, _) => RefreshFromUserSelection();
         check.Click += (_, _) =>
@@ -350,7 +356,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         FrameworkElement badge = ApplicationIconHelper.CreateBadge(
             group.ExecutablePath, appName, AppIconSize);
         badge.VerticalAlignment = VerticalAlignment.Center;
-        badge.Margin = new Thickness(0, 0, 10, 0);
+        badge.Margin = new Thickness(0, 0, 12, 0);
         AutomationProperties.SetName(badge, $"Application: {appName}");
         Grid.SetColumn(badge, 1);
         row.Children.Add(badge);
@@ -359,7 +365,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         var name = new TextBlock
         {
             Text = appName,
-            FontSize = 13,
+            FontSize = 14,
             FontWeight = FontWeights.SemiBold,
             Foreground = _primaryText,
             TextTrimming = TextTrimming.CharacterEllipsis
@@ -372,7 +378,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             Text = group.WindowCount > 1
                 ? Loc.Format("{0} windows", group.WindowCount)
                 : Loc.TLabel(primary.WindowTitleLabel),
-            FontSize = 10.5,
+            FontSize = 12,
             Foreground = _tertiaryText,
             Margin = new Thickness(0, 1, 0, 0),
             TextTrimming = TextTrimming.CharacterEllipsis
@@ -384,7 +390,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
 
         var status = new TextBlock
         {
-            FontSize = 11.5,
+            FontSize = 12.5,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(8, 0, 6, 0),
             TextAlignment = TextAlignment.Right
@@ -408,8 +414,9 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         {
             Content = chevron,
             Appearance = ControlAppearance.Transparent,
-            Width = 24,
-            Height = 24,
+            Style = (Style)Resources["RestoreQuietButton"],
+            Width = 32,
+            Height = 32,
             Padding = new Thickness(0),
             MinWidth = 0,
             Focusable = false,
@@ -423,15 +430,15 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         row.Children.Add(toggle);
 
         AutomationProperties.SetName(container, Loc.TLabel(primary.AccessibilityLabel));
-        container.Children.Add(row);
+        container.Children.Add(new Border { Style = (Style)Resources["RestoreRow"], Child = row });
 
         var detailPanel = new StackPanel();
         var detailHost = new Border
         {
             Background = _expandedBackground,
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(RowIndent, 4, 10, 6),
-            Margin = new Thickness(0, 2, 0, 4),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(RowIndent, 5, 12, 6),
+            Margin = new Thickness(0, 0, 0, 8),
             Visibility = Visibility.Collapsed,
             Child = detailPanel
         };
@@ -518,7 +525,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
 
     private FrameworkElement BuildWindowRow(RestorePlanPreviewEntry entry)
     {
-        var row = new Grid { MinHeight = 28 };
+        var row = new Grid { MinHeight = 34 };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -531,7 +538,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             Margin = new Thickness(0, 0, 10, 0),
             Tag = entry.EntryIndex
         };
-        AutomationProperties.SetName(check, $"Include {entry.DisplayName}");
+        AutomationProperties.SetName(check, Loc.Format("Include {0}", entry.DisplayName));
         AutomationProperties.SetHelpText(check, Loc.T(entry.AccessibilityLabel));
         check.Checked += (_, _) => RefreshFromUserSelection();
         check.Unchecked += (_, _) => RefreshFromUserSelection();
@@ -543,7 +550,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             Text = string.IsNullOrWhiteSpace(entry.WindowTitleLabel)
                 ? Loc.TLabel(entry.DisplayName)
                 : Loc.TLabel(entry.WindowTitleLabel),
-            FontSize = 12.5,
+            FontSize = 13,
             Foreground = _primaryText,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -555,7 +562,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
 
         var status = new TextBlock
         {
-            FontSize = 11.5,
+            FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             TextAlignment = TextAlignment.Right
         };
@@ -976,7 +983,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         row.Children.Add(new TextBlock
         {
             Text = header,
-            FontSize = 10.5,
+            FontSize = 12,
             Foreground = _tertiaryText,
             VerticalAlignment = VerticalAlignment.Center
         });
@@ -985,9 +992,10 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         {
             Content = row,
             Appearance = ControlAppearance.Transparent,
+            Style = (Style)Resources["RestoreQuietButton"],
             Padding = new Thickness(0),
             MinWidth = 0,
-            Height = 22,
+            Height = 30,
             HorizontalAlignment = HorizontalAlignment.Left,
             Focusable = true
         };
@@ -1009,23 +1017,22 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
 
     private void UseDialogAccent()
     {
-        Resources["SystemAccentColor"] = (_accent as SolidColorBrush)?.Color ?? Colors.MediumPurple;
-        Resources["SystemAccentColorPrimaryBrush"] = _accent;
-        Resources["AccentFillColorDefaultBrush"] = _accent;
-        Resources["AccentFillColorSecondaryBrush"] = _accent;
-        Resources["AccentTextFillColorPrimaryBrush"] = _accent;
-
-        // WPF-UI paints check boxes from their own brush keys, so the dialog accent must be
-        // applied there too or the boxes keep the system accent instead of the reference purple.
-        Brush hover = Solid(ThemeService.IsDark ? "#BCA8FF" : "#8A70F0");
-        Brush uncheckedHover = Resource("ControlFillColorSecondaryBrush", Brushes.Gainsboro);
-        Resources["CheckBoxCheckBackgroundFillChecked"] = _accent;
-        Resources["CheckBoxCheckBackgroundFillCheckedPointerOver"] = hover;
-        Resources["CheckBoxCheckBackgroundFillUncheckedPointerOver"] = uncheckedHover;
-        Resources["CheckBoxCheckBorderBrush"] = _accent;
-        Resources["CheckBoxCheckGlyphForeground"] = Brushes.White;
+        bool dark = PrefersDarkPalette();
+        Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/SuKe;component/UI/RestorePlanPreviewStyles.xaml"),
+        });
+        Resources["RestoreAccent"] = _accent;
+        Resources["RestoreAccentHover"] = Solid(dark ? "#A78BF9" : "#8061E9");
+        Resources["RestoreAccentPressed"] = Solid(dark ? "#8362DC" : "#5D3BCB");
+        Resources["RestoreSurface"] = Solid(dark ? "#27262F" : "#FFFFFF");
+        Resources["RestoreHover"] = Solid(dark ? "#32303D" : "#F3F1FA");
+        Resources["RestorePressed"] = Solid(dark ? "#393544" : "#ECE8F7");
+        Resources["RestoreControlBorder"] = Solid(dark ? "#514C60" : "#D9D6E3");
+        Resources["RestorePrimaryText"] = _primaryText;
+        Resources["RestoreSecondaryText"] = _secondaryText;
+        Resources[typeof(CheckBox)] = Resources["RestoreCheckBox"];
         Resources["RadioButtonCheckBackgroundFillChecked"] = _accent;
-        Resources["RadioButtonCheckBackgroundFillCheckedPointerOver"] = hover;
         Resources["RadioButtonCheckGlyphForeground"] = Brushes.White;
     }
 
