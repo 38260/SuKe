@@ -340,6 +340,104 @@ public class RestorePlanPreviewTests
         Assert.All(preview.Entries, entry => Assert.DoesNotContain("Window", entry.AppLabel));
     }
 
+    [Fact]
+    public void Preview_groups_windows_by_saved_identity_and_keeps_counts_as_windows()
+    {
+        RestorePlanEntry first = IdentityEntry(0, "chrome",
+            @"C://Program Files//Google//Chrome//Application//chrome.exe", "项目文档");
+        RestorePlanEntry second = IdentityEntry(1, "chrome",
+            @"C://Program Files//Google//Chrome//Application//chrome.exe", "调试页面");
+        RestorePlanEntry third = IdentityEntry(2, "msedge",
+            @"C://Program Files (x86)//Microsoft//Edge//Application//msedge.exe", "参考文档");
+        var plan = new RestorePlan
+        {
+            WorkspaceName = "Grouping",
+            Entries = [first, second, third],
+            Actions = [Move(0, 10), Move(1, 11), Move(2, 12)]
+        };
+
+        RestorePlanPreview preview = RestorePlanPreviewBuilder.Build(plan);
+
+        Assert.Equal(2, preview.AppCount);
+        Assert.Equal(3, preview.WindowCount);
+        Assert.Collection(
+            preview.Groups,
+            group =>
+            {
+                Assert.Equal(2, group.WindowCount);
+                Assert.Equal(["entry-0", "entry-1"], group.Entries.Select(entry => entry.EntryId));
+            },
+            group => Assert.Equal(1, group.WindowCount));
+    }
+
+    [Fact]
+    public void Preview_keeps_installed_web_apps_of_one_browser_in_separate_groups()
+    {
+        RestorePlanEntry docs = IdentityEntry(0, "chrome",
+            @"C://Program Files//Google//Chrome//Application//chrome.exe", "文档") with
+        {
+            SavedIdentity = new SavedWindowIdentity
+            {
+                EntryId = "entry-0", ProcessName = "chrome",
+                ExecutablePath = @"C://Program Files//Google//Chrome//Application//chrome.exe",
+                Title = "文档", IsWebApp = true, PwaIdentity = "app:docs"
+            }
+        };
+        RestorePlanEntry mail = IdentityEntry(1, "chrome",
+            @"C://Program Files//Google//Chrome//Application//chrome.exe", "邮件") with
+        {
+            SavedIdentity = new SavedWindowIdentity
+            {
+                EntryId = "entry-1", ProcessName = "chrome",
+                ExecutablePath = @"C://Program Files//Google//Chrome//Application//chrome.exe",
+                Title = "邮件", IsWebApp = true, PwaIdentity = "app:mail"
+            }
+        };
+        var plan = new RestorePlan { Entries = [docs, mail], Actions = [Move(0, 10), Move(1, 11)] };
+
+        RestorePlanPreview preview = RestorePlanPreviewBuilder.Build(plan);
+
+        Assert.Equal(2, preview.AppCount);
+        Assert.All(preview.Groups, group => Assert.Equal(1, group.WindowCount));
+    }
+
+    [Fact]
+    public void Preview_window_label_drops_only_an_application_suffix()
+    {
+        RestorePlanPreviewEntry editor = Assert.Single(RestorePlanPreviewBuilder.Build(new RestorePlan
+        {
+            Entries = [IdentityEntry(0, "Code", @"C://Apps//Code.exe", "项目文档 - Code")],
+            Actions = [Move(0, 10)]
+        }).Entries);
+        RestorePlanPreviewEntry browser = Assert.Single(RestorePlanPreviewBuilder.Build(new RestorePlan
+        {
+            Entries = [IdentityEntry(0, "chrome",
+                @"C://Program Files//Google//Chrome//Application//chrome.exe", "GitHub - Google Chrome")],
+            Actions = [Move(0, 10)]
+        }).Entries);
+
+        Assert.Equal("项目文档", editor.WindowTitleLabel);
+        // 窗口标题属于用户数据，不是应用名后缀时保持原样。
+        Assert.Equal("GitHub - Google Chrome", browser.WindowTitleLabel);
+    }
+
+    private static RestorePlanEntry IdentityEntry(int index, string process, string executable,
+        string title) => Entry(
+        index,
+        RestorePlanEntryOutcome.Matched,
+        Placement(),
+        Candidate(10 + index, WindowMatchConfidence.Exact),
+        actions: [Move(index, 10 + index)]) with
+    {
+        SavedIdentity = new SavedWindowIdentity
+        {
+            EntryId = "entry-" + index,
+            ProcessName = process,
+            ExecutablePath = executable,
+            Title = title
+        }
+    };
+
     private static RestorePlanEntry BrowserEntry(int index, RestoreAction action) => new(
         index,
         $"browser-{index}",

@@ -81,6 +81,30 @@ public sealed record RestorePlanPreviewEntry(
 
     /// <summary>Short application name for the badge tooltip and its letter fallback.</summary>
     public string AppLabel { get; init; } = "";
+
+    /// <summary>
+    /// Stable display-grouping key derived from the saved application identity (web-app identity,
+    /// executable path, packaged app id, then process name). Grouping is presentation only: every
+    /// entry keeps its own <see cref="EntryIndex"/>, <see cref="EntryId"/>, candidates and placement.
+    /// </summary>
+    public string AppKey { get; init; } = "";
+
+    /// <summary>Window title without the saved application suffix, used as the row's second line.</summary>
+    public string WindowTitleLabel { get; init; } = "";
+}
+
+/// <summary>
+/// Presentation-only grouping of the saved windows that belong to one application. The group has
+/// no authority over restore behaviour: it only decides how the preview lists and counts windows.
+/// </summary>
+public sealed record RestorePlanPreviewAppGroup(
+    string AppKey,
+    string AppLabel,
+    string ExecutablePath,
+    IReadOnlyList<RestorePlanPreviewEntry> Entries)
+{
+    /// <summary>Number of saved windows, never the number of browser tabs inside them.</summary>
+    public int WindowCount => Entries.Count;
 }
 
 /// <summary>
@@ -99,6 +123,16 @@ public sealed record RestorePlanPreview
     public int BlockingErrorCount { get; init; }
     public int DestructiveActionCount { get; init; }
     public string DestructiveSummary { get; init; } = "";
+
+    /// <summary>Windows grouped by saved application identity, in saved order.</summary>
+    public IReadOnlyList<RestorePlanPreviewAppGroup> Groups { get; init; } =
+        Array.Empty<RestorePlanPreviewAppGroup>();
+
+    /// <summary>Number of distinct applications in the plan.</summary>
+    public int AppCount => Groups.Count;
+
+    /// <summary>Number of saved windows in the plan.</summary>
+    public int WindowCount => Entries.Count;
 }
 
 /// <summary>Creates presentation-only projections from immutable restore plans.</summary>
@@ -115,12 +149,21 @@ public static class RestorePlanPreviewBuilder
         int destructiveCount = entries.Sum(entry => entry.Actions.Count(action => action.IsDestructive)) +
             globals.Count(action => action.IsDestructive);
         bool minimizes = globals.Any(action => action.Kind == RestorePreviewActionKind.Minimize);
+        RestorePlanPreviewAppGroup[] groups = entries
+            .GroupBy(entry => entry.AppKey, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new RestorePlanPreviewAppGroup(
+                group.Key,
+                group.First().AppLabel,
+                group.First().ExecutablePath,
+                group.ToArray()))
+            .ToArray();
 
         return new RestorePlanPreview
         {
             WorkspaceName = plan.WorkspaceName,
             Mode = plan.Mode,
             Entries = entries,
+            Groups = groups,
             GlobalActions = globals,
             EnabledEntryCount = entries.Count(entry => entry.IsInitiallyEnabled),
             BlockingErrorCount = entries.Sum(entry => entry.BlockingErrors.Count),
@@ -213,8 +256,51 @@ public static class RestorePlanPreviewBuilder
             PolicyLabel = RestorePolicyResolver.Label(entry.RestorePolicy),
             KeepRunning = entry.KeepRunning,
             ExecutablePath = entry.SavedIdentity.ExecutablePath,
-            AppLabel = ApplicationLabel(entry.SavedIdentity)
+            AppLabel = ApplicationLabel(entry.SavedIdentity),
+            AppKey = AppIdentityKey(entry.SavedIdentity, entry.EntryId),
+            WindowTitleLabel = WindowTitleLabel(entry.SavedIdentity)
         };
+    }
+
+    /// <summary>
+    /// Grouping must survive two windows of one app sharing a title and must keep two different
+    /// apps that share an executable (installed web apps) apart, so identity is read from the
+    /// strongest available evidence instead of the display name.
+    /// </summary>
+    private static string AppIdentityKey(SavedWindowIdentity identity, string entryId)
+    {
+        if (identity.IsWebApp && !string.IsNullOrWhiteSpace(identity.PwaIdentity))
+            return "pwa:" + identity.PwaIdentity.Trim();
+
+        string path = WindowIdentityExtractor.NormalizePath(identity.ExecutablePath);
+        if (path.Length > 0) return "exe:" + path;
+
+        if (!string.IsNullOrWhiteSpace(identity.AppUserModelId))
+            return "aumid:" + identity.AppUserModelId.Trim();
+
+        if (!string.IsNullOrWhiteSpace(identity.ProcessName))
+            return "proc:" + ProcessIdentityNormalizer.Normalize(identity.ProcessName);
+
+        return "entry:" + entryId;
+    }
+
+    /// <summary>
+    /// Window title with a trailing " - &lt;app&gt;" suffix removed when that suffix repeats the
+    /// application identity; anything else is left untouched because titles are user data.
+    /// </summary>
+    private static string WindowTitleLabel(SavedWindowIdentity identity)
+    {
+        string title = identity.Title.Trim();
+        int cut = title.LastIndexOf(" - ", StringComparison.Ordinal);
+        if (cut <= 0) return title;
+
+        string tail = title[(cut + 3)..].Trim();
+        string processName = identity.ProcessName.Trim();
+        string fileName = Path.GetFileNameWithoutExtension(identity.ExecutablePath);
+        bool repeatsApp =
+            (processName.Length > 0 && tail.Equals(processName, StringComparison.OrdinalIgnoreCase)) ||
+            (fileName.Length > 0 && tail.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+        return repeatsApp ? title[..cut].Trim() : title;
     }
 
     /// <summary>
