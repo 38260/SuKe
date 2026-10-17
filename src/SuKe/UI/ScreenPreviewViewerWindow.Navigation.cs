@@ -141,6 +141,10 @@ internal sealed partial class ScreenPreviewViewerWindow
         _next!.IsEnabled = _navigation.HasNext;
         _pageNumber!.Text = $"{_navigation.Index + 1} / {_navigation.Count}";
         AutomationProperties.SetName(_pageNumber, Loc.Format("Image {0} of {1}", _navigation.Index + 1, _navigation.Count));
+
+        // 每一张都回到「铺满视口」：沿用上一张的滚轮倍数会让不同分辨率的截图看起来大小不一，
+        // 而用户翻页的预期是看下一块屏幕的完整画面。
+        _zoom = ScreenPreviewZoom.Fit;
         ApplyZoom();
         _scroll.ScrollToHome();
     }

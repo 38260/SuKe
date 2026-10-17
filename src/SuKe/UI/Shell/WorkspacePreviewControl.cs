@@ -8,10 +8,10 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using SuKe.Localization;
 using SuKe.Models;
 using SuKe.Services;
+using SuKe.UI;
 
 namespace SuKe.UI.Shell;
 
@@ -101,26 +101,7 @@ public sealed class WorkspacePreviewControl : StackPanel
     }
 
     /// <summary>按目标显示宽度解码，并冻结以便跨线程交给 UI 线程。</summary>
-    private static ImageSource? Decode(byte[] png, int targetWidth)
-    {
-        try
-        {
-            using var stream = new MemoryStream(png, writable: false);
-            var bitmap = new BitmapImage();
-            bitmap.BeginInit();
-            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.DecodePixelWidth = targetWidth;
-            bitmap.StreamSource = stream;
-            bitmap.EndInit();
-            bitmap.Freeze();
-            return bitmap;
-        }
-        catch (Exception ex) when (ex is IOException or NotSupportedException or ArgumentException or InvalidOperationException)
-        {
-            // 不用空白图形冒充截图；其余可解码的显示器仍可展示。
-            return null;
-        }
-    }
+    private static ImageSource? Decode(byte[] png, int targetWidth) => ScreenPreviewImage.Decode(png, targetWidth);
 
     /// <summary>缩略图的实际像素宽度：按卡片里真实的展示宽度并乘上当前 DPI 缩放。</summary>
     private int ThumbnailWidthPixels()
@@ -233,7 +214,8 @@ public sealed class WorkspacePreviewControl : StackPanel
         int selectedPage = 0;
         foreach (ScreenPreview image in images)
         {
-            if (Decode(image.Png, 1200) is not ImageSource enlarged) continue;
+            // 放大查看要原始像素：查看器会把图铺满整块屏幕，缩略图分辨率放大后只是糊块。
+            if (ScreenPreviewImage.Decode(image.Png) is not ImageSource enlarged) continue;
             MonitorInfo? monitor = workspace.Monitors.FirstOrDefault(item => item.Index == image.ScreenIndex);
             string label = ScreenPreviewText.ScreenLabel(image.ScreenIndex);
             string? subtitle = monitor is null

@@ -202,7 +202,6 @@ internal sealed class StartupWorkspaceDialog : FluentWindow
     private UIElement BuildScreenPreviews(WorkspaceSnapshot workspace)
     {
         var panel = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-        var pages = new List<ScreenPreviewPage>();
 
         IReadOnlyList<ScreenPreview> images;
         try
@@ -242,13 +241,12 @@ internal sealed class StartupWorkspaceDialog : FluentWindow
             // Border is not a Control, so the control-level double-click event is unavailable here.
             // Counting clicks on the button-down event lets the handler respond to a single click and
             // stop the event from bubbling into the list item, which would restore the workspace.
-            int selectedPage = pages.Count;
-            pages.Add(new ScreenPreviewPage(bitmap, ScreenPreviewText.ScreenLabel(image.ScreenIndex),
-                MonitorSubtitle(workspace, image.ScreenIndex)));
+            // 放大查看需要原始像素，所以在点击时才重新解码，列表里仍是廉价缩略图。
+            int screenIndex = image.ScreenIndex;
             frame.MouseLeftButtonDown += (_, e) =>
             {
                 e.Handled = true;
-                new ScreenPreviewViewerWindow(pages, selectedPage, this).ShowDialog();
+                OpenViewer(workspace, screenIndex);
             };
             frame.ToolTip = ScreenPreviewText.ZoomHint;
             frame.Cursor = System.Windows.Input.Cursors.Hand;
@@ -257,6 +255,37 @@ internal sealed class StartupWorkspaceDialog : FluentWindow
         }
 
         return panel;
+    }
+
+    /// <summary>按原始像素重新解码整份预览，再打开放大查看器。</summary>
+    /// <remarks>
+    /// 列表里的位图是按缩略图宽度解码的，直接拿去放大就是糊的；查看器打开即铺满屏幕，
+    /// 因此这里重新读一次 zip。读取失败保持原有策略：不打开查看器，也不影响启动流程。
+    /// </remarks>
+    private void OpenViewer(WorkspaceSnapshot workspace, int screenIndex)
+    {
+        IReadOnlyList<ScreenPreview> images;
+        try
+        {
+            images = _previews.Load(workspace);
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        var pages = new List<ScreenPreviewPage>(images.Count);
+        int selectedPage = 0;
+        foreach (ScreenPreview image in images)
+        {
+            if (ScreenPreviewImage.Decode(image.Png) is not BitmapSource full) continue;
+            if (image.ScreenIndex == screenIndex) selectedPage = pages.Count;
+            pages.Add(new ScreenPreviewPage(full, ScreenPreviewText.ScreenLabel(image.ScreenIndex),
+                MonitorSubtitle(workspace, image.ScreenIndex)));
+        }
+
+        if (pages.Count == 0) return;
+        new ScreenPreviewViewerWindow(pages, selectedPage, this).ShowDialog();
     }
 
     /// <summary>Monitor name and resolution for one captured screen, when it is still resolvable.</summary>

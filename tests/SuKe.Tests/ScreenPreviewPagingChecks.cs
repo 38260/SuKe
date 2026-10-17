@@ -60,6 +60,8 @@ internal static class ScreenPreviewPagingChecks
 
     internal static void Verify(ScreenPreviewViewerWindow viewer, int count, int selectedIndex)
     {
+        // 点开就是最大化：截图本身是整屏分辨率，小窗口里只能看到缩略效果。
+        Assert.Equal(WindowState.Maximized, viewer.WindowState);
         viewer.WindowState = WindowState.Maximized;
         Pump();
         var previous = Find<Button>(viewer, "ScreenPreviewPrevious");
@@ -76,11 +78,17 @@ internal static class ScreenPreviewPagingChecks
         Assert.False(previous.IsEnabled);
         if (count > 1)
         {
-            var image = Walk(viewer).OfType<Image>().Single();
+            // 每张图都从「铺满视口」开始：点开的那张如此，翻到的下一张也如此。
+            Image image = Walk(viewer).OfType<Image>().Single();
+            ScrollViewer viewport = Ancestor<ScrollViewer>(image)!;
             ImageSource first = image.Source;
+            AssertFillsViewport(viewport, image);
+
+            // 键盘翻页保持原语义：右/下前进，左/上后退，首尾停止。
             Press(viewer, Key.Right);
             Assert.Equal($"2 / {count}", indicator.Text);
             Assert.NotSame(first, image.Source);
+            AssertFillsViewport(viewport, image);
             Press(viewer, Key.PageUp);
             Assert.Same(first, image.Source);
             Press(viewer, Key.PageDown);
@@ -88,16 +96,29 @@ internal static class ScreenPreviewPagingChecks
             Press(viewer, Key.Left);
             Assert.Equal($"1 / {count}", indicator.Text);
 
+            // 实际大小是 1:1，不是「铺满」。
             Button actualSize = Walk(viewer).OfType<Button>()
                 .Single(button => Equals(button.Content, Loc.T("Actual size")));
             Click(actualSize);
-            Assert.Equal(Stretch.None, image.Stretch);
+            Assert.Equal(image.Source.Width, image.Width, 1);
+            Assert.Equal(image.Source.Height, image.Height, 1);
+            Assert.Contains(Walk(viewer).OfType<Button>(),
+                button => Equals(button.Content, Loc.T("Fit to window")));
+
+            // 滚轮就是缩放：向上放大、向下缩小，比例直接体现在画面宽度上。
+            double actualWidth = image.Width;
+            Wheel(viewport, 120);
+            Assert.True(image.Width > actualWidth,
+                $"向上滚轮应放大：实际大小 {actualWidth}，滚动后 {image.Width}。");
+            Wheel(viewport, -240);
+            Assert.True(image.Width < actualWidth,
+                $"向下滚轮应缩小：实际大小 {actualWidth}，滚动后 {image.Width}。");
+
+            // 翻页回到铺满，不沿用上一张的滚轮倍数。
             Click(next);
-            Assert.Equal(Stretch.None, image.Stretch);
-            Button fit = Walk(viewer).OfType<Button>()
-                .Single(button => Equals(button.Content, Loc.T("Fit to window")));
-            Click(fit);
-            Assert.Equal(Stretch.Uniform, image.Stretch);
+            AssertFillsViewport(viewport, image);
+            Assert.Contains(Walk(viewer).OfType<Button>(),
+                button => Equals(button.Content, Loc.T("Actual size")));
         }
         while (next.IsEnabled) Click(next);
         string last = indicator.Text;
@@ -211,6 +232,44 @@ internal static class ScreenPreviewPagingChecks
             node = VisualTreeHelper.GetParent(node);
         }
         return string.Join(" < ", parts);
+    }
+
+    /// <summary>图片必须铺满视口的一条边，另一条边不溢出——这就是「每张图都最大化」的判据。</summary>
+    internal static void AssertFillsViewport(ScrollViewer viewport, Image image)
+    {
+        double viewportWidth = viewport.ViewportWidth;
+        double viewportHeight = viewport.ViewportHeight;
+        Assert.True(viewportWidth > 0 && viewportHeight > 0,
+            $"视口必须有尺寸，实际 {viewportWidth:F1}×{viewportHeight:F1}。");
+
+        double widthRatio = image.Width / viewportWidth;
+        double heightRatio = image.Height / viewportHeight;
+        Assert.True(Math.Abs(Math.Max(widthRatio, heightRatio) - 1) <= 0.02,
+            $"图片应铺满视口的一条边：图片 {image.Width:F1}×{image.Height:F1}，" +
+            $"视口 {viewportWidth:F1}×{viewportHeight:F1}。");
+        Assert.True(widthRatio <= 1.02 && heightRatio <= 1.02,
+            $"图片不应超出视口：图片 {image.Width:F1}×{image.Height:F1}，" +
+            $"视口 {viewportWidth:F1}×{viewportHeight:F1}。");
+    }
+
+    private static T? Ancestor<T>(DependencyObject node) where T : DependencyObject
+    {
+        for (DependencyObject? current = VisualTreeHelper.GetParent(node);
+             current is not null;
+             current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is T match) return match;
+        }
+        return null;
+    }
+
+    private static void Wheel(UIElement target, int delta)
+    {
+        target.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, delta)
+        {
+            RoutedEvent = UIElement.PreviewMouseWheelEvent,
+        });
+        Pump();
     }
 
     private static void Click(Button button)

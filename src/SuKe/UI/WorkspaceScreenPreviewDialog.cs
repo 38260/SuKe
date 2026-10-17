@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -46,14 +45,8 @@ internal sealed class WorkspaceScreenPreviewDialog : FluentWindow
         {
             try
             {
-                using var stream = new MemoryStream(preview.Png, writable: false);
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.DecodePixelWidth = 1600;
-                bitmap.StreamSource = stream;
-                bitmap.EndInit();
-                bitmap.Freeze();
+                // 这里给的是放大查看用的位图，必须保留原始像素：列表里缩略图和查看器共用同一份解码结果。
+                if (ScreenPreviewImage.Decode(preview.Png) is not BitmapSource bitmap) continue;
 
                 panels.Children.Add(new TextBlock
                 {
