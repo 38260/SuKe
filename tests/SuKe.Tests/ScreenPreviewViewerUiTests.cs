@@ -14,7 +14,7 @@ namespace SuKe.Tests;
 public class ScreenPreviewViewerUiTests
 {
     [Fact]
-    public void Viewer_opens_maximized_fills_every_page_and_zooms_with_the_wheel()
+    public void Viewer_fills_every_page_and_zooms_with_the_wheel()
     {
         SmoothScrollUiTests.RunSta(() =>
         {
@@ -28,7 +28,11 @@ public class ScreenPreviewViewerUiTests
                 viewer.Show();
                 SmoothScrollUiTests.Pump(150);
 
-                Assert.Equal(WindowState.Maximized, viewer.WindowState);
+                // 点开是普通窗口，不直接占满屏幕。
+                Assert.Equal(WindowState.Normal, viewer.WindowState);
+                // 后续断言在最大化态下跑，验证尺寸变化后重新铺满。
+                viewer.WindowState = WindowState.Maximized;
+                SmoothScrollUiTests.Pump(150);
 
                 Image image = ActivityDetailsUiTests.Walk(viewer).OfType<Image>().Single();
                 ScrollViewer viewport = Ancestor<ScrollViewer>(image)!;

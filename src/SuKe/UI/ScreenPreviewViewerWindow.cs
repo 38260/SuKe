@@ -19,8 +19,9 @@ namespace SuKe.UI;
 /// cheap and predictable: it owns one bitmap that the caller already decoded, never reloads the
 /// preview archive, and cannot change anything about the workspace it came from. Escape closes it.
 /// <para>
-/// 打开即最大化：截图本身就是整屏分辨率，放在 1180×760 的窗口里只能看到缩略效果。
-/// 每张图都按视口等比例铺满（<see cref="ScreenPreviewZoom"/>），滚轮以指针为中心缩放，
+/// 默认以 1180×760 的普通窗口打开，不直接最大化——点开一张缩略图只是"看一眼"，
+/// 不该把整块屏幕占掉。标题栏保留最大化按钮，需要看细节时再自行放大即可。
+/// 每张图都按当前视口等比例铺满（<see cref="ScreenPreviewZoom"/>），滚轮以指针为中心缩放，
 /// 放大后可以直接拖动画面平移。窗口尺寸变化（最大化/还原）后会重新铺满，不会停在旧尺寸上。
 /// </para>
 /// </remarks>
@@ -55,8 +56,8 @@ internal sealed partial class ScreenPreviewViewerWindow : FluentWindow
             ? WindowStartupLocation.CenterScreen
             : WindowStartupLocation.CenterOwner;
         ExtendsContentIntoTitleBar = true;
-        // 点开即铺满整块屏幕；还原后回到构造尺寸，图片同样会重新填满较小的视口。
-        WindowState = WindowState.Maximized;
+        // 保持普通窗口态；需要更大画面时由用户点标题栏的最大化按钮。
+        WindowState = WindowState.Normal;
 
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

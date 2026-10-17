@@ -60,8 +60,9 @@ internal static class ScreenPreviewPagingChecks
 
     internal static void Verify(ScreenPreviewViewerWindow viewer, int count, int selectedIndex)
     {
-        // 点开就是最大化：截图本身是整屏分辨率，小窗口里只能看到缩略效果。
-        Assert.Equal(WindowState.Maximized, viewer.WindowState);
+        // 点开只是普通窗口，不抢占整块屏幕；放大由用户点标题栏的最大化按钮。
+        Assert.Equal(WindowState.Normal, viewer.WindowState);
+        // 下面的分页/铺满断言仍在最大化态下跑，覆盖"窗口尺寸变化后重新铺满"。
         viewer.WindowState = WindowState.Maximized;
         Pump();
         var previous = Find<Button>(viewer, "ScreenPreviewPrevious");
