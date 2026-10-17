@@ -1,0 +1,113 @@
+<UserControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml" xmlns:shell="clr-namespace:SuKe.UI.Shell" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" x:Class="SuKe.UI.Shell.ActivityPage" d:DataContext="{d:DesignInstance Type=shell:ActivityPage}" mc:Ignorable="d" Foreground="{DynamicResource TextFillColorPrimaryBrush}">
+
+    <UserControl.Resources>
+
+        <DataTemplate x:Key="ActivityRowTemplate">
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Timeline rail: the segment above and below the node is hidden at the ends. -->
+                <Grid Grid.Column="0"><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><Border Style="{StaticResource WaTimelineConnector}" Margin="0,0,0,-12" Grid.RowSpan="3"/><Border Style="{StaticResource WaTimelineConnector}" Visibility="{Binding ConnectorAboveVisibility}" Grid.Row="0"/><Border Style="{StaticResource WaTimelineConnector}" Visibility="{Binding ConnectorBelowVisibility}" Grid.Row="2"/><Ellipse Style="{StaticResource WaTimelineDot}" Width="15" Height="15" Grid.Row="1" Margin="0,0,0,0" x:Name="Dot"/></Grid><Border Grid.Column="1" Style="{StaticResource WaHoverCard}" Padding="18,16" MinHeight="92">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource WaIconBadgeLarge}" Margin="0,0,20,0" Background="{DynamicResource AccentFillColorDefaultBrush}">
+                            <ui:SymbolIcon Symbol="{Binding Icon}" FontSize="28" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Title}" Style="{StaticResource WaItemTitleCompact}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Meta}" Style="{StaticResource WaItemMetaCompact}" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Summary}" FontSize="13" Margin="0,5,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Visibility="{Binding SummaryVisibility}"/>
+                        </StackPanel>
+
+                        <!-- 分类与详情共享一行及列宽，长标题换行时操作区域仍保持对齐。 -->
+                        <Grid Grid.Column="2" Margin="20,0,0,0" VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="ActivityCategory"/>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="ActivityDetails"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource WaPillNeutral}" Height="Auto" MinHeight="38" MinWidth="64" VerticalAlignment="Stretch">
+                                <TextBlock Text="{Binding CategoryLabel}" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                            </Border>
+                            <ui:Button Grid.Column="1" Content="{shell:LocalizedText 'Details'}" Tag="{Binding}" Click="OnActivityDetails" Appearance="Secondary" Margin="12,0,0,0" Padding="14,7" VerticalAlignment="Stretch" AutomationProperties.Name="Activity details" Style="{DynamicResource WaSecondaryAction}" MinWidth="116"/>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Category}" Value="Restore">
+                    <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource SystemAccentColorPrimaryBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Category}" Value="Saved">
+                    <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+    </UserControl.Resources>
+
+    <Grid Margin="40,24,28,0" Grid.IsSharedSizeScope="True">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ── Page header ──────────────────────────────────────────────────── -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="{shell:LocalizedText 'Activity'}" Style="{StaticResource WaPageTitleCompact}"/>
+            <TextBlock Text="{shell:LocalizedText 'Recent workspace activity'}" Style="{StaticResource WaPageSubtitleCompact}"/>
+        </StackPanel>
+
+        <!-- ── Event-type filters ───────────────────────────────────────────── -->
+        <WrapPanel Grid.Row="1" Margin="0,18,0,10">
+            <ToggleButton x:Name="FilterAll" Style="{StaticResource WaFilterChip}" Tag="{x:Static ui:SymbolRegular.TextBulletListSquare24}" Content="{shell:LocalizedText 'All activity'}" IsChecked="True" Checked="OnFilterChecked" Unchecked="OnFilterUnchecked" ToolTip="{shell:LocalizedText 'Show every durable event'}"/>
+            <ToggleButton x:Name="FilterRestore" Style="{StaticResource WaFilterChip}" Tag="{x:Static ui:SymbolRegular.ArrowCounterclockwise24}" Content="{shell:LocalizedText 'Restores'}" Checked="OnFilterChecked" Unchecked="OnFilterUnchecked" ToolTip="{shell:LocalizedText 'Operations that started a restore, switch, or undo'}"/>
+            <ToggleButton x:Name="FilterSaved" Style="{StaticResource WaFilterChip}" Tag="{x:Static ui:SymbolRegular.Save24}" Content="{shell:LocalizedText 'Saves'}" Checked="OnFilterChecked" Unchecked="OnFilterUnchecked" ToolTip="{shell:LocalizedText 'Workspaces that were saved'}"/>
+            <ToggleButton x:Name="FilterSystem" Style="{StaticResource WaFilterChip}" Tag="{x:Static ui:SymbolRegular.Settings24}" Content="{shell:LocalizedText 'System'}" Checked="OnFilterChecked" Unchecked="OnFilterUnchecked" ToolTip="{shell:LocalizedText 'Display-driven and manual checkpoints'}"/>
+        </WrapPanel>
+
+        <!-- ── Timeline ─────────────────────────────────────────────────────── -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0" Padding="0,0,0,12" Focusable="False" shell:SmoothScrollBehavior.Enabled="True">
+            <StackPanel>
+                <ItemsControl x:Name="GroupList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Header}" Style="{StaticResource WaSectionTitleCompact}" Margin="0,18,0,10"/>
+                                <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource ActivityRowTemplate}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Border x:Name="EmptyCard" Style="{StaticResource WaCard}" Margin="0,10,0,0" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <ui:SymbolIcon Symbol="Info24" FontSize="18" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="EmptyTitle" Text="{shell:LocalizedText 'No activity recorded yet'}" Style="{StaticResource WaItemTitleCompact}" FontSize="14"/>
+                            <TextBlock x:Name="EmptyDetail" Text="{shell:LocalizedText 'Events appear here once you save a workspace or start a restore.'}" Style="{StaticResource WaItemMetaCompact}" Margin="0,3,0,0" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ── Privacy footnote ─────────────────────────────────────────────── -->
+        <Grid Grid.Row="3" Margin="0,8,0,14">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <ui:SymbolIcon Symbol="Info24" FontSize="15" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+            <TextBlock x:Name="ActivityFootnote" Grid.Column="1" Text="{shell:LocalizedText 'Activity is based on saved workspaces, retained checkpoints, and the recorded result of each restore. Details stay on this device and exclude paths, window titles, and URLs.'}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" HorizontalAlignment="Left" Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,100 @@
+# ── Build outputs ──────────────────────────────────────────────
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+publish/
+
+# ── .NET / Visual Studio ──────────────────────────────────────
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+*.csproj.user
+*_wpftmp.csproj
+*.dbmdl
+*.jfm
+*.pfx
+*.publishsettings
+launchSettings.json
+
+# ── NuGet ──────────────────────────────────────────────────────
+**/packages/*
+*.nupkg
+.nuget/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ── Rider / JetBrains ─────────────────────────────────────────
+.idea/
+*.sln.iml
+
+# ── AI / Copilot temp files ───────────────────────────────────
+.cursorrules
+.cursorignore
+_chat.md
+.copilot/
+.github/copilot/
+*.aider*
+.aider*/
+.claude/
+
+# ── OS-generated files ────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ── User-specific files ───────────────────────────────────────
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+!**/Resources/*.ico
+/*.deps.json
+/*.runtimeconfig.json
+
+# ── Test results ───────────────────────────────────────────────
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+TestResult.xml
+*.trx
+*.coverage
+*.coveragexml
+
+# ── Misc ───────────────────────────────────────────────────────
+*.swp
+*.swo
+*~
+*.tmp
+*.bak
+*.orig
+
+# ── Local research/draft artifacts ─────────────────────────────
+SuKe.md
+File_restore.md
+copilot.md
+docs/videos/SuKe.mp4
+
+# ── Workspace-local artifacts (not shipped) ────────────────────
+# 构建验收产物、临时解包目录、AI 工作区数据与设计参考图只保留在本机
+build-verify/
+build-out/
+.tmp-asar/
+.workbuddy/
+参考图/
+
+# ── 内部工程笔记（仅本地维护，不公开）─────────────────────────
+项目记忆.md
+todo.md
+QA.md

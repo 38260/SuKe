@@ -1,0 +1,14 @@
+{
+  "version": {
+    "license": "MIT"
+  },
+  "categories": {
+    "firefox": [
+      "tabs"
+    ]
+  },
+  "summary": {
+    "en-US": "Save and restore Firefox windows, tabs, pinned tabs, and tab groups with SuKe."
+  },
+  "requires_payment": false
+}

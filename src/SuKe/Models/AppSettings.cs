@@ -1,0 +1,292 @@
+using System;
+using System.Collections.Generic;
+using System.Text.Json.Serialization;
+
+namespace SuKe.Models;
+
+/// <summary>
+/// Defines how the app behaves on startup regarding workspace restoration.
+/// </summary>
+public enum StartupBehavior
+{
+    /// <summary>Don't restore any workspace on startup.</summary>
+    None = 0,
+
+    /// <summary>Restore a specific default workspace.</summary>
+    RestoreDefault = 1,
+
+    /// <summary>Restore the most recently saved workspace.</summary>
+    RestoreLastUsed = 2,
+
+    /// <summary>Show a dialog asking the user which workspace to restore.</summary>
+    AskUser = 3,
+}
+
+/// <summary>Minimum severity written to the local diagnostic log.</summary>
+public enum DiagnosticLogLevel
+{
+    Debug = 0,
+    Info = 1,
+    Warning = 2,
+    Error = 3,
+    Off = 4
+}
+
+/// <summary>Controls how SuKe handles a saved layout returning after a temporary display excursion.</summary>
+public enum TemporaryDisplayRecoveryMode
+{
+    /// <summary>Do not track or offer temporary-display recovery.</summary>
+    Disabled = 0,
+
+    /// <summary>Offer the recovered layout from the tray; the user chooses whether to restore it.</summary>
+    Ask = 1,
+
+    /// <summary>Restore the recovered layout after a checkpoint, unless fullscreen activity is active.</summary>
+    AutomaticallyRestore = 2
+}
+
+/// <summary>Interface language of the SuKe user interface.</summary>
+public enum UiLanguage
+{
+    /// <summary>Simplified Chinese interface, produced by the runtime localization layer.</summary>
+    ChineseSimplified = 0,
+
+    /// <summary>Original English interface.</summary>
+    English = 1
+}
+
+/// <summary>Colour theme applied to the SuKe shell and its windows.</summary>
+public enum AppThemeMode
+{
+    /// <summary>Follow the Windows app theme and update when Windows changes it.</summary>
+    FollowSystem = 0,
+
+    /// <summary>始终使用亮色；未配置主题时的默认选择。</summary>
+    Light = 1,
+
+    /// <summary>始终使用石墨深色。</summary>
+    Dark = 2
+}
+
+/// <summary>
+/// Persisted binding for a single keyboard shortcut.
+/// Stored as human-readable strings for clean JSON output.
+/// </summary>
+public class HotkeyBinding
+{
+    /// <summary>Matches <see cref="Services.HotkeyService.HotkeyInfo.ActionId"/>.</summary>
+    public string ActionId  { get; set; } = "";
+
+    /// <summary>Modifier keys, e.g. "Ctrl+Alt" or "Ctrl+Shift".</summary>
+    public string Modifiers { get; set; } = "";
+
+    /// <summary>Key name matching <see cref="System.Windows.Input.Key"/> enum, e.g. "S", "D1".</summary>
+    public string KeyName   { get; set; } = "";
+}
+
+/// <summary>
+/// Persisted, runtime-independent description of a live window selected by the user. The
+/// executable/class or stronger application identity anchors the hint; title tokens are only a
+/// secondary discriminator and are never persisted as the sole identity.
+/// </summary>
+public sealed record WindowIdentityHint
+{
+    public string ExecutablePath { get; init; } = "";
+    public string ProcessName { get; init; } = "";
+    public string WindowClassName { get; init; } = "";
+    public string AppUserModelId { get; init; } = "";
+    public string PackageFamilyName { get; init; } = "";
+    public string FolderPath { get; init; } = "";
+    public string BrowserFamily { get; init; } = "";
+    public string BrowserSiteHost { get; init; } = "";
+    public string PwaIdentity { get; init; } = "";
+    public IReadOnlyList<string> TitleTokens { get; init; } = Array.Empty<string>();
+}
+
+/// <summary>A learned match scoped by immutable workspace and entry identifiers.</summary>
+public sealed record WindowMatchHint
+{
+    public string WorkspaceId { get; init; } = "";
+    public string EntryId { get; init; } = "";
+    public WindowIdentityHint Identity { get; init; } = new();
+}
+
+/// <summary>
+/// A reusable application identity that is preserved during exact workspace switches. Either an
+/// executable filename or an AppUserModelId is required; window titles and install directories are
+/// deliberately not part of this preference.
+/// </summary>
+public sealed record PersistentApplicationIdentity
+{
+    public string ExecutableName { get; init; } = "";
+    public string AppUserModelId { get; init; } = "";
+}
+
+/// <summary>
+/// Runtime-only presentation data for a configured persistent application. It is deliberately
+/// separate from the persisted identity so display paths and titles do not become restore policy.
+/// </summary>
+public sealed record PersistentApplicationCandidate(
+    PersistentApplicationIdentity Identity,
+    string ExecutablePath);
+
+/// <summary>
+/// Persisted application settings stored in %AppData%\SuKe\settings.json.
+/// </summary>
+public class AppSettings
+{
+    /// <summary>Current persisted settings schema version.</summary>
+    public const int CurrentSchemaVersion = 11;
+
+    /// <summary>Schema version used to serialize this settings document.</summary>
+    [JsonInclude]
+    public int SchemaVersion { get; internal set; } = CurrentSchemaVersion;
+
+    // ── Startup ───────────────────────────────────────────────────────────
+    public StartupBehavior StartupBehavior { get; set; } = StartupBehavior.None;
+
+    /// <summary>Stable ID of the workspace restored by <see cref="StartupBehavior.RestoreDefault"/>.</summary>
+    public string? DefaultWorkspaceId { get; set; }
+
+    /// <summary>Legacy name-based default reference, accepted only during v1 migration.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DefaultWorkspaceName { get; set; }
+
+    // ── Notifications ────────────────────────────────────────────────────
+    /// <summary>Whether SuKe may show system-tray balloon notifications.</summary>
+    public bool NotificationsEnabled { get; set; } = true;
+
+    // ── Onboarding ───────────────────────────────────────────────────────
+    /// <summary>
+    /// Whether the first interactive-launch guide has already been presented. Existing
+    /// installations are marked complete by the v4-to-v5 settings migration; the guide remains
+    /// available from the tray and Settings regardless of this value.
+    /// </summary>
+    public bool OnboardingCompleted { get; set; }
+
+    // ── Restore workflow ─────────────────────────────────────────────────
+    /// <summary>
+    /// Whether interactive restore and switch commands show the review dialog before execution.
+    /// A preview can still be required when the plan needs an explicit ambiguity or blocking-error
+    /// decision.
+    /// </summary>
+    public bool ShowRestorePreview { get; set; }
+
+    /// <summary>
+    /// Whether routine restore mutations capture a durable recovery checkpoint first. Exact workspace
+    /// switches and Undo always create a checkpoint because they can close or replace desktop state.
+    /// </summary>
+    public bool CreateRestoreCheckpoints { get; set; }
+
+    /// <summary>
+    /// Controls recovery after a temporary resolution, docking, or monitor-topology excursion
+    /// returns to a previously saved display layout. New and upgraded installations ask first.
+    /// </summary>
+    public TemporaryDisplayRecoveryMode TemporaryDisplayRecoveryMode { get; set; } =
+        TemporaryDisplayRecoveryMode.Ask;
+
+    /// <summary>Legacy v1.6.1 preview setting retained only for settings-file compatibility.</summary>
+    public bool EnableVirtualDesktopAssociation { get; set; }
+
+    // ── Appearance and language ──────────────────────────────────────────
+    /// <summary>
+    /// Interface language. The English strings in markup and code are never modified; the runtime
+    /// localization layer translates them on the way to the screen, so this setting only decides
+    /// whether that layer is active.
+    /// </summary>
+    public UiLanguage UiLanguage { get; set; } = UiLanguage.ChineseSimplified;
+
+    /// <summary>
+    /// 未配置主题时默认亮色；已有明确保存的主题选择继续生效。
+    /// </summary>
+    public AppThemeMode ThemeMode { get; set; } = AppThemeMode.Light;
+
+    private double _uiFontScale = 1;
+
+    /// <summary>全局文字比例；旧配置默认 100%，视觉基准统一由 TypographyService 调整。</summary>
+    public double UiFontScale
+    {
+        get => _uiFontScale;
+        set => _uiFontScale = double.IsFinite(value) ? Math.Clamp(value, 0.8, 1.5) : 1;
+    }
+
+    /// <summary>Minimum foreground-window area that must remain in a current work area before rescue acts.</summary>
+    public double MinimumVisibleWindowAreaRatio { get; set; } = 0.25;
+
+    // ── Diagnostics ──────────────────────────────────────────────────────
+    /// <summary>
+    /// Minimum local log severity. Exported diagnostics are independently redacted by default.
+    /// </summary>
+    public DiagnosticLogLevel DiagnosticLogLevel { get; set; } = DiagnosticLogLevel.Debug;
+
+    // ── Keyboard shortcuts ────────────────────────────────────────────────
+    public bool HotkeysEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Custom hotkey overrides.  When <c>null</c> or empty the built-in defaults apply.
+    /// Only entries that differ from the defaults need to be stored.
+    /// </summary>
+    public List<HotkeyBinding>? CustomHotkeys { get; set; }
+
+    // ── Workspace display order ───────────────────────────────────────────
+    /// <summary>
+    /// Stable workspace IDs in the user's preferred display order.
+    /// The first three map to Ctrl+Alt+1/2/3 hotkeys.
+    /// Workspaces not in this list are appended at the end (sorted by save date).
+    /// </summary>
+    public List<string>? WorkspaceOrderIds { get; set; }
+
+    /// <summary>Legacy name-based display order, accepted only during v1 migration.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? WorkspaceOrder { get; set; }
+    // ── Monitor aliases ───────────────────────────────────────────────────
+    /// <summary>
+    /// User-defined friendly names for monitors, keyed by stable EDID-based MonitorId.
+    /// When set, the alias replaces the hardware FriendlyName throughout the UI.
+    /// </summary>
+    public Dictionary<string, string>? MonitorAliases { get; set; }
+
+    // ── Logical path aliases ─────────────────────────────────────────────
+    /// <summary>
+    /// Per-device mappings from a logical root such as <c>PROJECTS</c> to an absolute local
+    /// directory. Workspace entries retain both the original absolute path and the logical form.
+    /// </summary>
+    public Dictionary<string, string>? LogicalPathAliases { get; set; }
+
+    // ── Dedicated browser windows ─────────────────────────────────────────
+    /// <summary>
+    /// URL fragments identifying browser windows that should be restored as their own window
+    /// rather than through the browser's session restore.
+    /// <para>
+    /// Some sites cannot be installed as a web app (no PWA manifest) but are still kept in a
+    /// dedicated window next to a normal multi-tab window. Such a window is indistinguishable
+    /// from any other browser window, so <c>--restore-last-session</c> cannot bring it back
+    /// reliably. When a window's address bar matches one of these fragments, SuKe stores
+    /// the URL and reopens the window with <c>--new-window &lt;url&gt;</c>.
+    /// </para>
+    /// <para>
+    /// A bare domain such as <c>vari.love</c> matches every page on that site. When the list is
+    /// empty no URLs are read at all, so snapshots are unaffected for users not using this.
+    /// </para>
+    /// </summary>
+    public List<string>? DedicatedBrowserUrlPatterns { get; set; }
+
+    /// <summary>How browser-session restore handles an already-open matching tab in the same profile.</summary>
+    public BrowserTabRestorePolicy BrowserTabRestorePolicy { get; set; } =
+        BrowserTabRestorePolicy.ReuseMatchingTab;
+
+    // ── Global switch preservation ───────────────────────────────────────
+    /// <summary>
+    /// Applications preserved during Exact Switch across every workspace. Identities use an
+    /// executable filename or exact AUMID only, so titles and versioned install paths cannot
+    /// accidentally create an exception.
+    /// </summary>
+    public List<PersistentApplicationIdentity>? PersistentApplications { get; set; }
+
+    // ── Learned window matching ──────────────────────────────────────────
+    /// <summary>
+    /// User-approved match hints keyed by stable workspace and entry IDs. Runtime HWND/PID values
+    /// are deliberately never persisted.
+    /// </summary>
+    public List<WindowMatchHint>? WindowMatchHints { get; set; }
+}

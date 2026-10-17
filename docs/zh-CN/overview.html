@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SuKe 项目介绍（中文）</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --ink: #1b1f24;
+    --ink-2: #46505c;
+    --ink-3: #6b7684;
+    --line: #e3e7ec;
+    --line-2: #eef1f4;
+    --accent: #1f5f8b;
+    --accent-soft: #eaf2f8;
+    --accent-2: #0f7a63;
+    --accent-2-soft: #e6f4f0;
+    --warn-soft: #fdf3e6;
+    --warn-ink: #8a5a10;
+    --radius: 12px;
+    --mono: "Cascadia Mono", "JetBrains Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", system-ui, -apple-system, sans-serif;
+    font-size: 15.5px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 80px; }
+
+  header.hero {
+    background: linear-gradient(160deg, #ffffff 0%, #f2f6fa 100%);
+    border-bottom: 1px solid var(--line);
+    padding: 56px 0 40px;
+    margin-bottom: 40px;
+  }
+  .hero-inner { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+  .hero h1 { font-size: 38px; line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.5px; }
+  .hero .sub { font-size: 17px; color: var(--ink-2); margin: 0 0 22px; max-width: 760px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge {
+    display: inline-block; font-size: 12.5px; padding: 4px 11px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent); border: 1px solid #d5e4ef;
+  }
+  .badge.green { background: var(--accent-2-soft); color: var(--accent-2); border-color: #cfe8e1; }
+  .badge.grey { background: #f0f2f5; color: var(--ink-3); border-color: var(--line); }
+
+  h2 {
+    font-size: 23px; margin: 52px 0 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px;
+  }
+  h3 { font-size: 17px; margin: 30px 0 8px; color: var(--ink); }
+  p { margin: 10px 0; color: var(--ink-2); }
+  strong { color: var(--ink); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .lead {
+    background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: var(--radius); padding: 18px 22px; margin: 0 0 8px;
+  }
+  .lead p { margin: 0; color: var(--ink); }
+
+  .grid { display: grid; gap: 14px; }
+  .grid.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 760px) { .grid.c2, .grid.c3 { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .card h4 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; font-size: 14px; color: var(--ink-2); }
+  .card .k { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: #f2f5f8; font-weight: 600; color: var(--ink); }
+  td { background: var(--surface); color: var(--ink-2); }
+
+  pre {
+    background: #1e2530; color: #e6edf3; border-radius: 10px; padding: 14px 16px;
+    overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.6; margin: 12px 0;
+  }
+  code { font-family: var(--mono); font-size: 13px; background: #eef1f5; color: #24405c;
+         padding: 1.5px 5px; border-radius: 4px; }
+  pre code { background: none; color: inherit; padding: 0; }
+
+  .layers { display: flex; flex-direction: column; gap: 6px; margin: 18px 0; }
+  .layer {
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px;
+    background: var(--surface); display: flex; gap: 16px; align-items: baseline;
+  }
+  .layer .ln {
+    flex: 0 0 118px; font-weight: 600; font-size: 14px; color: var(--accent);
+  }
+  .layer .ld { font-size: 13.5px; color: var(--ink-3); font-family: var(--mono); }
+  .layer .note { font-size: 13.5px; color: var(--ink-2); margin-top: 3px; font-family: inherit; }
+  .layer.f0 { border-left: 3px solid #7aa7c7; }
+  .layer.f1 { border-left: 3px solid #4d8db5; }
+  .layer.f2 { border-left: 3px solid #2477a6; }
+  .layer.f3 { border-left: 3px solid #1f5f8b; }
+  .layer.f4 { border-left: 3px solid #164a6d; }
+
+  ol.flow { counter-reset: s; list-style: none; padding: 0; margin: 16px 0; }
+  ol.flow li {
+    counter-increment: s; position: relative; padding: 0 0 16px 46px;
+    border-left: 1px dashed var(--line); margin-left: 14px;
+  }
+  ol.flow li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  ol.flow li::before {
+    content: counter(s); position: absolute; left: -14px; top: 0;
+    width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff;
+    font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+  }
+  ol.flow li b { display: block; color: var(--ink); }
+  ol.flow li span { font-size: 14px; color: var(--ink-2); }
+
+  figure { margin: 20px 0; }
+  figure img {
+    width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #fff; display: block;
+  }
+  figcaption { font-size: 13px; color: var(--ink-3); margin-top: 8px; text-align: center; }
+
+  .callout {
+    border-radius: var(--radius); padding: 14px 18px; margin: 16px 0;
+    background: var(--accent-2-soft); border: 1px solid #cfe8e1; color: #17564a; font-size: 14.5px;
+  }
+  .callout.warn { background: var(--warn-soft); border-color: #f0dcc0; color: var(--warn-ink); }
+  .callout b { color: inherit; }
+
+  ul.tight { margin: 10px 0; padding-left: 22px; }
+  ul.tight li { margin: 5px 0; color: var(--ink-2); }
+
+  .doclist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
+  @media (max-width: 760px) { .doclist { grid-template-columns: 1fr; } }
+  .doclist a {
+    display: block; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; font-size: 14px;
+  }
+  .doclist a:hover { border-color: #bcd4e4; text-decoration: none; }
+  .doclist a span { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+
+  footer {
+    margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line);
+    font-size: 13px; color: var(--ink-3);
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <h1>溯刻 · SuKe</h1>
+    <p class="sub">Windows 11 工作区管理器。它恢复的不只是窗口矩形——还包含受支持的文件、文件夹、浏览器会话、资源管理器标签页、终端标签页，以及每个窗口所在的虚拟桌面。</p>
+    <div class="badges">
+      <span class="badge">当前版本 v1.7.0 — Desktop Context</span>
+      <span class="badge grey">.NET 8 · C# 12 · WPF</span>
+      <span class="badge grey">Windows x64</span>
+      <span class="badge green">MIT License</span>
+      <span class="badge grey">Release 测试 380 通过 / 0 失败</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="lead">
+    <p><strong>一句话：</strong>SuKe 是一个常驻托盘的 Windows 应用。你把当前正在用的一整套工作环境「拍一张快照」存成<strong>工作区</strong>，之后随时一键恢复——包括窗口在多显示器上的确切位置、打开的文件与文件夹、浏览器标签页、资源管理器标签页、终端标签页，以及它们各自所属的虚拟桌面。</p>
+  </div>
+
+  <h2>它和 PowerToys Workspaces 有什么不同</h2>
+  <p>两者都能保存窗口位置。SuKe 的差异点在于<strong>保留上下文，而不只是矩形</strong>：</p>
+  <div class="grid c2">
+    <div class="card">
+      <h4>保存的不只是坐标</h4>
+      <p>把应用放置、受支持的文件、浏览器会话、资源管理器标签页、Windows 终端标签页与虚拟桌面归属一起写进同一份快照。</p>
+    </div>
+    <div class="card">
+      <h4>显示器变了也能对齐</h4>
+      <p>分辨率、DPI、扩展坞或显示器集合变化时，从「精确像素」自动切换为「语义化布局」（左半屏、三分、居中……）并重新映射。</p>
+    </div>
+    <div class="card">
+      <h4>恢复前可复核</h4>
+      <p>歧义匹配会先摆在你面前让你确认；同一个活动窗口绝不会被分配给两条保存记录（会话级一对一 HWND 归属不变式）。</p>
+    </div>
+    <div class="card">
+      <h4>破坏性操作可回滚</h4>
+      <p>精确切换与撤销必须先落一份持久化检查点；关闭窗口只用正常关闭请求，绝不强杀进程。</p>
+    </div>
+  </div>
+
+  <h2>核心能力</h2>
+  <div class="grid c3">
+    <div class="card"><h4>跨显示器保存/恢复</h4><p>多显示器、多虚拟桌面统一建模；重建缺失桌面并把窗口送回原处。</p></div>
+    <div class="card"><h4>会话级集成</h4><p>Chromium/Firefox 浏览器会话、PWA、资源管理器多标签页、Windows 终端标签页、VS Code 工作区。</p></div>
+    <div class="card"><h4>六种恢复模式</h4><p><span class="k">Repair</span> <span class="k">Move Existing</span> <span class="k">Resume</span> <span class="k">Launch Fresh</span> <span class="k">Exact Switch</span> <span class="k">Preview Only</span></p></div>
+    <div class="card"><h4>逐条目策略覆盖</h4><p>强制复用、缺失则启动、总是新开、从不启动、从不关闭、切换期间忽略。</p></div>
+    <div class="card"><h4>检查点与撤销</h4><p>可选常规检查点 + 强制的切换/撤销检查点，支持「撤销的撤销」。</p></div>
+    <div class="card"><h4>脱敏诊断</h4><p>逐条目、逐动作的结果报告；导出时路径/标题/URL/工作区名/标识符/命令行全部脱敏。</p></div>
+    <div class="card"><h4>临时显示恢复</h4><p>扩展坞插拔或分辨率抖动稳定后，可选择「先询问 / 禁用 / 自动+检查点」恢复布局。</p></div>
+    <div class="card"><h4>可移植传输</h4><p>工作区可导出为「精确」或「可移植/脱敏」文件，导入总是创建独立副本、绝不覆盖。</p></div>
+    <div class="card"><h4>确定性仿真</h4><p>9 组合成装置可在不动真实桌面的前提下验证规划器行为，适合 CI。</p></div>
+  </div>
+
+  <figure>
+    <img src="../screenshots/settings_saved_workspaces.png" alt="已保存工作区管理界面" />
+    <figcaption>Settings · Saved Workspaces —— 已保存工作区的管理与逐项操作入口</figcaption>
+  </figure>
+
+  <h2>架构：每层只承担一项职责</h2>
+  <p>整个代码库围绕「UI 不含业务逻辑、业务逻辑不碰原生、原生层不含逻辑」这条主线组织。服务端源码再按归属拆成八个职责目录。</p>
+
+  <div class="layers">
+    <div class="layer f0">
+      <div class="ln">UI 层</div>
+      <div>
+        <div class="ld">App.xaml.cs · SettingsWindow · 各类对话框（WPF / 托盘）</div>
+        <div class="note">不持有业务逻辑，只调用 Coordinator。</div>
+      </div>
+    </div>
+    <div class="layer f1">
+      <div class="ln">Coordinator</div>
+      <div>
+        <div class="ld">LayoutCoordinator · 预览工作流</div>
+        <div class="note">决定手动/自动恢复的入口，持有面向用户的恢复通知。</div>
+      </div>
+    </div>
+    <div class="layer f2">
+      <div class="ln">Services</div>
+      <div>
+        <div class="ld">WorkspaceService · RestorePlanner / RestoreExecutor · WindowService · Monitor/Storage</div>
+        <div class="note">纯决策 + 显式的 I/O 边界。规划器不碰窗口、进程、文件系统与持久化。</div>
+      </div>
+    </div>
+    <div class="layer f3">
+      <div class="ln">Models</div>
+      <div>
+        <div class="ld">WorkspaceSnapshot · WorkspaceEntry · RestorePlan · 执行/预览结果</div>
+        <div class="note">不可变意图 + 纯持久化数据。</div>
+      </div>
+    </div>
+    <div class="layer f4">
+      <div class="ln">Native</div>
+      <div>
+        <div class="ld">NativeMethods.Window · NativeMethods.Display</div>
+        <div class="note">全部 P/Invoke 声明集中于此，不含任何逻辑。</div>
+      </div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>服务目录</th><th>职责</th></tr>
+    <tr><td><code>Services/AppAdapters</code></td><td>应用专属的采集、身份识别、启动、就绪与校验策略</td></tr>
+    <tr><td><code>Services/Browser</code></td><td>Chromium/Firefox 连接器、浏览器家族路由、URL、PWA、原生消息</td></tr>
+    <tr><td><code>Services/Capture</code></td><td>快照构建、资源发现、标题解析、Jump List</td></tr>
+    <tr><td><code>Services/Desktop</code></td><td>显示器拓扑、窗口清单/变更、放置几何、离屏救援</td></tr>
+    <tr><td><code>Services/Restore</code></td><td>纯规划、匹配、执行阶段、诊断投影、仿真</td></tr>
+    <tr><td><code>Services/Storage</code></td><td>原子持久化、仓储、迁移、别名、传输、同步传输层</td></tr>
+    <tr><td><code>Services/System</code></td><td>设置、日志、启动、热键、新手引导、可执行文件重绑定</td></tr>
+    <tr><td><code>Services/Workspace</code></td><td>采集/恢复门面、检查点、变体、切换、协调</td></tr>
+  </table>
+
+  <h2>一次「恢复」到底发生了什么</h2>
+  <p>这是理解整个项目的关键链路。注意「观测 → 纯规划 → 用户审批 → 过期预检 → 变更执行 → 校验」被拆成了彼此独立的边界。</p>
+  <ol class="flow">
+    <li><b>观测（只读）</b><span>枚举活动窗口、显示器拓扑、资源可用性、浏览器会话能力——不做任何改动。</span></li>
+    <li><b>纯规划</b><span><code>RestorePlanner</code> 生成不可变的 <code>RestorePlan</code>：每个条目的候选评分、选中匹配、DPI 感知目标位置、要执行的动作、警告与阻断错误。</span></li>
+    <li><b>用户审批</b><span>预览对话框只渲染计划的投影；歧义条目需要你选一个候选，取消勾选则从计划中派生掉该条目的动作。</span></li>
+    <li><b>检查点</b><span>整个切换（含关闭阶段）被包在一个事务闸门里。Exact Switch 与 Undo 强制先落一份持久化检查点，失败则零变更。</span></li>
+    <li><b>过期预检</b><span>执行前重新比对当前候选清单与预览、重新校验每个被引用的资源。状态变了就返回 <code>StalePlan</code>，绝不悄悄重规划。</span></li>
+    <li><b>变更执行</b><span>五个固定阶段：预检 → 浏览器与启动 → 就绪关联（250ms 轮询 / 45s 超时）→ 放置校验（有界重试）→ 有序结果聚合。</span></li>
+    <li><b>校验与报告</b><span>重新读取被分配 HWND 的边界/DWM 边框/ShowCmd/DPI，按目标 DPI 缩放的 8px 容差判定，必要时最多纠正两次。失败汇总为 <code>CompletedWithFailures</code>。</span></li>
+  </ol>
+
+  <div class="callout">
+    <b>为什么这样拆？</b> 因为「恢复」本质上是一个<strong>会破坏用户桌面状态的破坏性操作</strong>。把纯决策与副作用严格分开之后，规划器可以被 9 组合成装置完全离线测试，而执行路径上的每一次变更都必须重新校验它要操作的对象。
+  </div>
+
+  <h2>会话集成：Windows 没给 API 的部分</h2>
+  <p>Windows 本身没有通用的「会话恢复」API，所以 SuKe 用<strong>应用适配器</strong>补齐：</p>
+  <table>
+    <tr><th>目标</th><th>实现方式</th></tr>
+    <tr><td>Chromium 浏览器 / PWA</td><td>Manifest V3 扩展 + 原生消息（命名管道 <code>SuKe.BrowserBridge</code>），协议 v2</td></tr>
+    <tr><td>Firefox</td><td>独立包 + 独立管道 <code>SuKe.BrowserBridge.Firefox</code>；持久化 MV2 后台页（MV3 事件页会在等待桌面端请求时卸载端口）</td></tr>
+    <tr><td>文件资源管理器标签页</td><td><code>Shell.Application</code> 自动化 + <code>IShellBrowser</code>，在单条专用 STA 线程上串行化；按多重集合消耗位置，只补缺失的标签页，不产生重复</td></tr>
+    <tr><td>Windows 终端标签页</td><td>可访问性发现 + 可选的 PowerShell 提示符钩子（标题出现 <code>[WA:...]</code> 标记即生效）；单条 <code>wt</code> 命令恢复整套标签页</td></tr>
+    <tr><td>虚拟桌面</td><td>只用有文档的 <code>IVirtualDesktopManager</code> 接口；从不创建/枚举/命名/切换桌面，失败降级为动作级 <code>Skipped</code></td></tr>
+    <tr><td>ATLauncher / 打包应用 / Squirrel 更新</td><td>专用适配器：通过稳定启动器启动；从 <code>AppxManifest.xml</code> 推导 <code>PackageFamilyName!ApplicationId</code>；只在 Squirrel 安装根内解析同类最高版本</td></tr>
+  </table>
+
+  <figure>
+    <img src="../screenshots/tray_workspace_actions.png" alt="系统托盘中的工作区操作" />
+    <figcaption>托盘菜单 —— 保存、恢复、切换与撤销的日常入口</figcaption>
+  </figure>
+
+  <h2>安全与隐私</h2>
+  <ul class="tight">
+    <li>密码管理器与隐私/无痕浏览器窗口<strong>默认排除</strong>。</li>
+    <li>恢复计划在执行任何变更前重新校验窗口与启动目标；过期计划被拒绝而不会被静默重建。</li>
+    <li>关闭窗口只用正常关闭请求（<code>WM_CLOSE</code>），<strong>绝不强制终止</strong>应用。</li>
+    <li>Exact Switch 与 Undo 强制要求持久化检查点；失败则桌面保持不变。</li>
+    <li>诊断导出会脱敏路径（只留扩展名）、URL（只留 origin）、标题、工作区名、标识符（转确定性假名）与命令行。</li>
+    <li>工作区数据默认只留在 <code>%AppData%\SuKe</code>，除非你显式导出。</li>
+    <li>检查点采集<strong>不</strong>包含截图与文档内容。</li>
+  </ul>
+  <div class="callout warn">
+    <b>已知限制：</b>SuKe 无法通用地恢复「应用或 Windows 没有暴露」的内部状态——例如未保存的编辑器缓冲区、shell 历史、终端分屏窗格、任意对话框状态与专有项目状态。另外，以管理员权限运行的应用可能拒绝来自非提权应用的窗口几何变更（会被报告为非致命警告）。
+  </div>
+
+  <h2>技术栈与项目结构</h2>
+  <table>
+    <tr><th>项目</th><th>技术选型</th></tr>
+    <tr><td>应用（<code>src/SuKe</code>）</td><td>.NET 8 · C# 12 · WPF（<code>net8.0-windows</code>）· 单文件自包含发布</td></tr>
+    <tr><td>依赖（刻意保持极简）</td><td><code>H.NotifyIcon.Wpf</code> 2.1.0、<code>WPF-UI</code> 3.0.5、<code>OpenMcdf</code> 3.1.4</td></tr>
+    <tr><td>测试（<code>tests/SuKe.Tests</code>）</td><td>xUnit 2.9.3 · Microsoft.NET.Test.Sdk 17.14.1（Release 下 380 通过 / 0 失败 / 0 跳过）</td></tr>
+    <tr><td>浏览器连接器</td><td><code>browser-extension/</code>（Chromium MV3）· <code>firefox-extension/</code>（Firefox MV2 持久后台页）</td></tr>
+    <tr><td>规模</td><td>134 个 C# 源文件 · 42 个测试源文件 · 25 个测试装置 JSON</td></tr>
+    <tr><td>体量最大的核心文件</td><td><code>LayoutCoordinator</code>、<code>RestorePlanner</code>、<code>VirtualDesktopAssociationService</code>、<code>WorkspaceService</code>、<code>SchemaMigration</code></td></tr>
+  </table>
+
+  <pre><code>src/SuKe/
+├── App.xaml / App.xaml.cs        ← 入口、托盘图标接线、服务容器
+├── Models/                       ← 纯数据类（无逻辑、无依赖）
+├── Services/                     ← 全部业务逻辑（按上表八个目录拆分）
+├── Native/                       ← P/Invoke 声明（Windows API 封装）
+├── UI/                           ← WPF 窗口与对话框
+└── Resources/                    ← 图标与静态资源
+tests/SuKe.Tests/
+├── Fixtures/                     ← 旧版、当前、损坏与未来版本的 JSON 样本
+└── *.cs                          ← 服务层、规划器、预览与执行器测试/桩件</code></pre>
+
+  <h2>构建、测试与运行</h2>
+  <p>前置条件：<strong>.NET 8 SDK</strong>，Windows x64。所有命令在仓库根目录执行。</p>
+<pre><code># 跑完整 Release 测试套件（默认不会移动或启动真实桌面窗口）
+dotnet test SuKe.sln --configuration Release
+
+# 只跑确定性的恢复仿真子集
+dotnet test SuKe.sln --configuration Release --no-restore `
+  --filter "FullyQualifiedName~RestoreSimulationTests"
+
+# 发布为单个自包含 exe
+dotnet publish src/SuKe/SuKe.csproj -c Release -r win-x64 `
+  --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true
+
+# 在不动桌面的前提下检查某个装置的规划结果（退出码 0 = 期望全部匹配）
+dotnet .\src\SuKe\bin\Release\net8.0-windows\SuKe.dll `
+  --simulate-restore .\tests\SuKe.Tests\Fixtures\restore-simulations\single-monitor.json</code></pre>
+  <p>通过后可执行文件位于 <code>src\SuKe\bin\Release\net8.0-windows\win-x64\publish\SuKe.exe</code>。完整的打包与 Release 产物流程见 <a href="build.md">构建、测试与发布</a>。</p>
+
+  <h2>当前状态与路线图</h2>
+  <table>
+    <tr><th>维度</th><th>状态</th></tr>
+    <tr><td>最新发布</td><td>v1.7.0「Desktop Context」——终端标签页 + 虚拟桌面 + 临时显示恢复 + ATLauncher 兼容</td></tr>
+    <tr><td>自动化</td><td>Release 下 380 通过 / 0 失败 / 0 跳过；无已知漏洞的 NuGet 依赖</td></tr>
+    <tr><td>仿真覆盖</td><td>9 组装置：单/双显示器、负坐标、混合 DPI、缺失与同型号显示器、浏览器/PWA、VS Code 项目、路径别名重映射、对抗性拓扑、损坏输入</td></tr>
+    <tr><td>待完成的人工关卡</td><td>WA-006A（真实 Windows 下的 Restore / Exact Switch / Undo / 撤销的撤销）；Firefox 已签名多配置文件往返</td></tr>
+    <tr><td>公开工单</td><td>仅 <a href="../../README.md/issues/12">#12</a>（Squirrel 更新安全路径）仍未关闭，等报告者验证</td></tr>
+    <tr><td>明确不做</td><td>跨设备恢复、云同步、社区模板、通用自动化引擎、定时/解锁触发桌面变更、音频与设备配置、显示器模式切换、公开兼容性数据库</td></tr>
+  </table>
+
+  <h2>中文文档</h2>
+  <p>完整的官方英文文档已有一套中文译本，与英文原文同步维护；代码标识符、命令、路径与 UI 元素名保留英文以便对照。</p>
+  <div class="doclist">
+    <a href="index.md">中文文档索引<span>全部中文文档的对照表与术语约定</span></a>
+    <a href="../../README.zh-CN.md">README 中文版<span>项目总览、快速开始、会话集成、安全与隐私</span></a>
+    <a href="architecture.md">架构<span>每一层的职责、服务边界、数据流与模型</span></a>
+    <a href="build.md">构建、测试与发布<span>全部构建命令与 Release 产物流程</span></a>
+    <a href="CONTRIBUTING.md">贡献指南<span>编码规范、日志与隐私要求、PR 流程</span></a>
+    <a href="implementation-status.md">实现与验证状态<span>已验证行为 vs 人工关卡 vs 部分完成</span></a>
+    <a href="Roadmap.md">路线图<span>当前流水线、明确不做的方向、发布质量门槛</span></a>
+    <a href="browser-integration.md">浏览器集成<span>双连接器设计、协议、配置文件感知恢复</span></a>
+    <a href="workspace-import-export.md">工作区导入导出<span>精确备份与可移植/脱敏导出</span></a>
+    <a href="restore-simulation.md">恢复仿真装置<span>9 组装置与命令行用法</span></a>
+    <a href="manual-verification-wa-006a.md">WA-006A 人工验证<span>检查点与撤销的真机核对清单</span></a>
+    <a href="privacy-policy.md">隐私政策<span>浏览器连接器采集什么、去哪里</span></a>
+  </div>
+
+  <footer>
+    <p><strong>溯刻 · SuKe</strong> · <a href="../../README.md">项目说明</a> · MIT License</p>
+    <p>本页是官方英文文档的中文概览，与 <a href="../../README.md">README.md</a> 及各 docs 文档对应。若中英文出现歧义，以英文原文为准。</p>
+  </footer>
+
+</div>
+</body>
+</html>

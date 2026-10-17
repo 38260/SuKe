@@ -1,0 +1,61 @@
+using System;
+using System.Collections.Generic;
+using SuKe.Models;
+
+namespace SuKe.Services;
+
+/// <summary>Provides monitor state without coupling consumers to the Win32 display APIs.</summary>
+public interface IMonitorInventory
+{
+    /// <summary>Returns a stable fingerprint for the current set of monitors.</summary>
+    string GetCurrentMonitorFingerprint();
+
+    /// <summary>Returns the currently active monitors.</summary>
+    List<MonitorInfo> GetCurrentMonitors();
+}
+
+/// <summary>Provides policy-selected views of the raw native window inventory.</summary>
+public interface IWindowInventory
+{
+    /// <summary>最近一次原生采集的数量诊断；非原生来源可不提供。</summary>
+    WindowCaptureDiagnostics? LastCaptureDiagnostics => null;
+
+    /// <summary>Captures windows selected by an explicit policy, optionally assigning monitors.</summary>
+    List<WindowRecord> SnapshotWindows(
+        WindowCandidatePolicy policy,
+        List<MonitorInfo>? monitors = null);
+
+    /// <summary>Returns policy-selected live windows keyed by HWND with their process IDs.</summary>
+    Dictionary<IntPtr, (uint Pid, WindowRecord Record)> GetWindowsWithPids(
+        WindowCandidatePolicy policy);
+
+    /// <summary>
+    /// Returns process identities independently of whether those processes currently expose an
+    /// eligible user-facing window. Implementations may omit inaccessible processes.
+    /// </summary>
+    IReadOnlyList<RunningApplicationIdentity> GetRunningApplications() =>
+        Array.Empty<RunningApplicationIdentity>();
+
+    /// <summary>
+    /// Returns whether an HWND still exists, including when it is absent from the filtered
+    /// user-window inventory because it became temporarily hidden or otherwise ineligible.
+    /// </summary>
+    bool IsWindowAlive(IntPtr hWnd);
+}
+
+/// <summary>Applies restore mutations to live windows.</summary>
+public interface IWindowMutation
+{
+    /// <summary>Restores one live window to a saved placement.</summary>
+    void RestoreSingleWindow(IntPtr hWnd, WindowRecord record);
+
+    /// <summary>Minimizes policy-selected windows except those in <paramref name="keep"/>.</summary>
+    int MinimizeUserWindowsExcept(WindowCandidatePolicy policy, HashSet<IntPtr> keep);
+}
+
+/// <summary>Reports whether foreground fullscreen activity makes automatic display recovery unsafe.</summary>
+public interface IDisplayRecoveryEnvironment
+{
+    /// <summary>Returns true only when the foreground window covers its current monitor.</summary>
+    bool IsForegroundWindowFullscreen(IReadOnlyList<MonitorInfo> monitors);
+}

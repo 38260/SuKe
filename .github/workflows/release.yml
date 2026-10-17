@@ -1,0 +1,97 @@
+name: Release Build
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+
+      - name: Run service-layer tests
+        run: dotnet test SuKe.sln --configuration Release
+
+      - name: Build Windows executable
+        shell: pwsh
+        run: |
+          dotnet publish src/SuKe/SuKe.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:PublishReadyToRun=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            --output ./publish
+
+      - name: Validate and package Firefox connector
+        shell: pwsh
+        working-directory: ./firefox-extension
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          node --test ./tests/background.test.cjs
+          npx --yes web-ext@10.7.0 lint
+          npx --yes web-ext@10.7.0 build `
+            --filename "suke-firefox-connector-amo-$tag.zip" `
+            --artifacts-dir ../publish
+          Move-Item `
+            "../publish/suke-firefox-connector-amo-$tag.zip" `
+            "../publish/SuKe-Firefox-Connector-AMO-$tag.zip"
+
+      - name: Package release assets
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          $executable = "./publish/SuKe-$tag.exe"
+          $browserConnector = "./publish/SuKe-Browser-Connector-$tag.zip"
+          $firefoxConnector = "./publish/SuKe-Firefox-Connector-AMO-$tag.zip"
+          $terminalIntegration = "./publish/SuKe-Terminal-Integration-$tag.ps1"
+          Copy-Item `
+            ./publish/SuKe.exe `
+            $executable
+          Compress-Archive `
+            -Path ./browser-extension/* `
+            -DestinationPath $browserConnector `
+            -CompressionLevel Optimal
+          Copy-Item ./scripts/SuKe.Terminal.ps1 $terminalIntegration
+          $checksums = @($executable, $browserConnector, $firefoxConnector, $terminalIntegration) | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 $_).Hash
+            "$hash  $(Split-Path -Leaf $_)"
+          }
+          Set-Content `
+            -Path ./publish/SHA256SUMS.txt `
+            -Value $checksums `
+            -Encoding ascii
+
+      - name: Upload release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          gh release upload `
+            $tag `
+            "./publish/SuKe-$tag.exe" `
+            "./publish/SuKe-Browser-Connector-$tag.zip" `
+            "./publish/SuKe-Firefox-Connector-AMO-$tag.zip" `
+            "./publish/SuKe-Terminal-Integration-$tag.ps1" `
+            ./publish/SHA256SUMS.txt `
+            --repo "${{ github.repository }}" `
+            --clobber

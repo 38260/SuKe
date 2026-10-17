@@ -1,0 +1,710 @@
+# SuKe — Architecture
+
+This document describes the current development architecture of SuKe for contributors and
+maintainers. The latest released baseline is v1.7.0; implementation status is tracked in
+[`implementation-status.md`](implementation-status.md).
+
+---
+
+## Principle: One Responsibility Per Layer
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  UI Layer         App.xaml.cs · SettingsWindow · Dialogs        │
+│  (WPF, tray)      Owns no business logic. Calls Coordinator.    │
+├─────────────────────────────────────────────────────────────────┤
+│  Coordinator      LayoutCoordinator · Preview Workflow          │
+│                   Selects manual/automatic restore entry points │
+│                   and owns user-facing restore notifications.   │
+├─────────────────────────────────────────────────────────────────┤
+│  Services         WorkspaceService · RestorePlanner/Executor    │
+│                   WindowService · Monitor/Storage services      │
+│                   Pure decisions plus explicit I/O boundaries.  │
+├─────────────────────────────────────────────────────────────────┤
+│  Models           WorkspaceSnapshot · WorkspaceEntry            │
+│                   RestorePlan · execution/preview results        │
+│                   Immutable intent and plain persisted data.     │
+├─────────────────────────────────────────────────────────────────┤
+│  Native           NativeMethods.Window · NativeMethods.Display  │
+│                   All P/Invoke declarations. No logic.          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Service source is organized by ownership rather than kept in one flat folder:
+
+| Folder | Responsibility |
+|---|---|
+| `Services/AppAdapters` | Application-specific capture, identity, launch, readiness, and verification strategies. |
+| `Services/Browser` | Chromium/Firefox connectors, family routing, URL, PWA, and native-messaging integration. |
+| `Services/Capture` | Snapshot construction, resource discovery, title parsing, and Jump Lists. |
+| `Services/Desktop` | Monitor topology, window inventory/mutation, placement geometry, and rescue. |
+| `Services/Restore` | Pure planning, matching, execution phases, diagnostics projection, and simulation. |
+| `Services/Storage` | Atomic persistence, repositories, migrations, aliases, transfer, and sync transport. |
+| `Services/System` | Settings, logging, startup, hotkeys, onboarding, and executable rebinding. |
+| `Services/Workspace` | Capture/restore façade, checkpointing, variants, switching, and coordination. |
+
+---
+
+## Service Responsibilities
+
+### `MonitorService`
+Owns everything related to physical displays.
+
+- **`GetCurrentMonitorFingerprint()`** — calls `QueryDisplayConfig` to enumerate active display paths, extracts EDID manufacturer ID + product code + connector instance for each display, sorts them, joins them, and returns the first 8 hex characters of a SHA-256 hash. This hash is stable: it does not change when resolution or refresh rate changes, only when the set of physical monitors changes.
+- **`GetCurrentMonitors()`** — returns a `List<MonitorInfo>` where each entry has a stable `MonitorId` (same EDID-based format as the fingerprint), a friendly name from `DisplayConfigGetDeviceInfo`, full virtual-desktop bounds and taskbar-aware work area from `EnumDisplayMonitors`, effective DPI, and a primary flag.
+- **`GetMonitorForWindow(hWnd, monitors)`** — static helper, calls `MonitorFromWindow` to map a live HWND to a monitor in the supplied list.
+
+### `WindowInventory` and window policies
+`WindowInventory` calls `EnumWindows` and returns policy-free `ObservedWindow` facts: HWND, PID,
+owner, visibility, class, title, bounds, executable/process identity, and AUMID. Enumeration does
+not decide whether a window is safe to capture or mutate.
+
+`WindowPolicyEvaluator` applies one explicit named policy at each consumer boundary:
+
+- `CaptureCandidate` preserves the legacy save exclusions for invisible, owned, shell-chrome,
+  empty-title, and tiny utility windows.
+- `RestoreMatchCandidate` selects the same layout-shaped windows for matching.
+- `SwitchCloseCandidate` and `MinimizeCandidate` preserve the legacy layout exclusions and also
+  reject SuKe's own process.
+- `SwitchRiskCandidate` is deliberately broader: safe-switch preflight can inspect owned dialogs
+  and small/untitled transient windows without allowing those windows into a saved workspace.
+
+The policy layer contains no third-party application, process, or title blacklist; only known
+Windows shell-chrome classes remain platform exclusions. `WindowInventory` observes extended
+styles, DWM cloaking, ownership, root ownership, and the current visible owner-chain
+representative. Capture, restore matching, close, and minimize then select visible,
+uncloaked, independently manageable task windows: `WS_EX_TOOLWINDOW` is excluded,
+`WS_EX_NOACTIVATE` is excluded unless `WS_EX_APPWINDOW` explicitly opts the window into taskbar
+behavior, and ordinary owned/transient windows are excluded. The representative is diagnostic
+evidence rather than a hard gate because Microsoft documents the exact Alt+Tab algorithm as an
+implementation detail; an independent root remains captured while a temporary modal popup is
+open. `SwitchRiskCandidate` remains broader so ordinary owned dialogs still protect unsaved work.
+
+The process inventory is independent of the filtered window inventory. Therefore a legacy entry
+whose process is already running but exposes no eligible, unassigned user-facing window is shown
+as explained and excluded rather than relaunched or allowed to consume a readiness timeout. Window
+multiplicity is preserved at capture—there is no product-specific deduplication—and the restore
+session's one-HWND-per-entry invariant handles assignment safely. Hosted windows may cross process
+boundaries only when they expose the same AppUserModelID within the same package family; matching
+never uses a title-only host exception.
+
+### `WindowService`
+Applies explicit policies to raw inventory and owns live-window enrichment/mutation.
+
+- **`SnapshotWindows(policy, monitors?)`** — filters raw observations with the named policy,
+  enriches selected windows with placement/browser/folder data, and optionally assigns monitors.
+- **`GetWindowsWithPids(policy)`** — returns a policy-selected
+  `HWND → (PID, WindowRecord)` dictionary for restore matching.
+- **`InspectUserWindows(SwitchRiskCandidate)`** — supplies raw safe-switch preflight risks,
+  including owned save dialogs that capture excludes.
+- **`RequestCloseUserWindowsExcept(SwitchCloseCandidate, keep)`** posts `WM_CLOSE` only to
+  unrelated layout candidates and returns the exact HWND set that the switch engine must track.
+  Broad `SwitchRiskCandidate` observations remain preflight diagnostics and never control liveness.
+- **`MinimizeUserWindowsExcept(MinimizeCandidate, keep)`** keeps mutation policy explicit.
+- **`RestoreWindow(hWnd, record)`** — calls `SetWindowPlacement` then, for maximised windows, a second `ShowWindow(SW_MAXIMIZE)` pass to ensure the maximised state is applied on the correct monitor.
+- **`IsWindowAlive(hWnd)`** — performs an unfiltered native liveness check before a restore
+  session releases an assignment whose HWND disappeared from the user-window inventory.
+- **`RescueForegroundWindow(...)`** — reads the active HWND through the native boundary and applies
+  `OffScreenWindowRescueGeometry` only when the configured fraction of its restored bounds is not
+  visible in a current work area. Maximized state is preserved.
+
+### Application adapters
+
+`IAppAdapter` keeps application-specific behavior out of shared planner/executor policy. The
+registry asks adapters for capture enrichment, stable identity evidence, launch decisions,
+readiness strategy, and placement-verification strategy while matching safety, HWND ownership,
+resource validation, and mutation remain shared boundaries.
+
+- `ChromiumWebAppAdapter` captures installed PWA shortcut/fallback metadata and plans its launch.
+- `DedicatedBrowserWindowAdapter` plans a saved URL as an explicit new browser window.
+- `ExplorerFolderAdapter` captures the active folder plus the ordered multi-tab session when
+  file/folder capture is enabled. `ExplorerTabSessionService` performs Shell automation on one
+  dedicated STA thread and reconciles missing tabs only after the assigned Explorer HWND is ready.
+- `GenericWindowsAppAdapter` preserves generic executable, document/workspace, MSIX activation,
+  and ordinary Win32 fallback behavior when no specialized adapter accepts the entry.
+
+The registry is constructed from built-in adapters. WA-016 does not load arbitrary third-party
+assemblies.
+
+### Window identity and matching
+
+`WindowIdentityExtractor` is the single translation boundary from persisted `WorkspaceEntry`
+and runtime `WindowRecord` data into `SavedWindowIdentity` and `LiveWindowIdentity`. Saved
+identity contains stable evidence only; HWND and PID exist exclusively on the live model.
+
+`WindowMatcher` is the stable public façade over the pure internal `WindowMatchResolver` and
+returns every live window as a scored `WindowMatchCandidate` with machine-readable
+`WindowMatchEvidence`. Matching proceeds from exact stable identities (PWA or
+packaged-app AUMID and dedicated-browser site), through document/project evidence, generic
+executable/class/title signals, and finally weak monitor/geometry context. Results are ordered by
+eligibility, descending score, and ascending HWND, so equal candidates remain visible as ties while
+presentation stays deterministic.
+
+`WindowMatchPolicy` owns the minimum title/geometry/score thresholds, strong-confidence boundary,
+top-vs-runner-up ambiguity margin, and learned-hint bonus. `WindowMatcher.Resolve` returns
+`Exact`, `Strong`, `Probable`, `Ambiguous`, or `Missing`; ambiguous results deliberately contain no
+selected candidate. Compatibility and post-launch reconciliation use the same resolver, so neither
+can fall back to HWND ordering.
+
+Learned choices, introduced in settings schema v3, are keyed by stable workspace and entry GUIDs. Their
+`WindowIdentityHint` combines executable/class or stronger AUMID, package, PWA, browser-site, or
+folder evidence with secondary title tokens. HWND/PID never enter the persisted model, and a title
+cannot be saved as the sole identity. A matching hint contributes explicit evidence and score; it
+does not bypass kind, executable, or minimum-eligibility checks.
+
+`RestoreAssignmentPlanner` owns one planning session's consumed-HWND set. It applies learned hints,
+projects candidates and evidence into the restore plan, commits only unambiguous selections, and
+protects every candidate within an unresolved ambiguity margin. No executor phase independently
+reassigns a reviewed live window.
+
+### Pure restore planning
+
+`RestorePlanner` builds an immutable `RestorePlan` from four explicit inputs: a saved
+`WorkspaceSnapshot`, a purpose-built `RestoreLiveInventory`, an already-observed
+`RestoreMonitorTopology`, and a `RestoreMode`. It performs no window, process, browser,
+file-system, or persistence operations.
+
+Every saved entry remains present as a `RestorePlanEntry`, including entries excluded by a
+selective restore or stopped by cancellation. Each entry records scored candidates and their
+identity evidence, the deterministic selected match, DPI-aware target placement, launch
+requirements, future `RestoreAction` descriptions, warnings, blocking errors, and one explained
+outcome. Candidate HWNDs are consumed across the whole build so two entries cannot claim the same
+live window.
+
+Missing and stale resources are supplied as observations and become blocked outcomes instead of
+exceptions. Browser-session unavailability becomes an explicit warning with ordinary launch
+fallbacks. `RestorePlan.Redact()` and `ToRedactedJson()` produce deep privacy-safe projections for
+diagnostics or preview.
+
+`RestorePolicyResolver` composes one explicit workspace mode with the persisted
+`WorkspaceEntry.RestorePolicy` exactly once during planning. Resume is the compatibility default:
+it reuses a match and launches a missing entry. Repair emits placement actions only for existing
+windows whose saved exact geometry differs (adapted geometry is conservatively repaired); Move
+Existing never launches; Launch Fresh prefers a distinct window; Exact Switch uses Resume entry
+behavior plus the coordinator's close phase; and Preview Only retains descriptive actions but is
+rejected before checkpointing or mutation. Selective restore and Align/Minimize remain compatibility
+wrappers over Resume behavior.
+
+Per-entry overrides can force reuse, launch-if-missing, always-launch-new, never-launch,
+never-close, or ignore-during-switch behavior. Fresh launch is guaranteed only for an entry with an
+explicit distinct-window launch contract; currently that is a dedicated browser URL launched with
+`--new-window`. Unsupported requests produce `UnsupportedAlwaysLaunchNew` and safely reuse the best
+existing match. For a supported fresh launch, the plan records pre-existing eligible HWNDs so the
+readiness phase cannot mistake an old window for the newly requested one.
+
+`PackagedAppResolver` treats a `WindowsApps` executable as a versioned observation, not a durable
+launch identity. It derives the package family from the saved package full name, finds the
+currently registered package, reads the matching application ID from `AppxManifest.xml`, and
+supplies `PackageFamilyName!ApplicationId` as an available packaged-app resource. This lets an old
+workspace activate the updated package through `shell:AppsFolder` even when its saved executable
+directory has been replaced. Capture uses the same resolver when a packaged child process does not
+expose an AUMID directly.
+
+`VersionedExecutableResolver` handles the corresponding classic-desktop update case without
+accepting wildcard paths from workspace data. When an exact executable is missing, it recognizes
+only a Squirrel install root containing `Update.exe`, requires the saved parent to be an
+`app-<version>` directory, enumerates only immediate sibling version directories, and selects the
+highest parsed version containing the exact same executable file name. The resolved concrete path
+is embedded in the immutable plan and revalidated immediately before launch.
+
+### Semantic and monitor-relative placement
+
+Workspace schema v7 retains the legacy absolute normal rectangle and separate `ShowCmd`, source
+monitor bounds/work area/DPI, `NormalizedWindowLayout`, topology-specific layout variants, and an
+explicit VS Code workspace kind. Capture derives X/Y/W/H relative to the work area, horizontal and
+vertical anchors, and recognizable full, left/right half, top/bottom half, thirds, centered, or
+custom layouts.
+
+`RestoreMonitorTopology.IsExactMatch` requires the same ordered stable IDs, virtual bounds, work
+areas, and DPI. The pure planner preserves exact pixels only for that case. Any geometry, work-area,
+DPI, orientation, or monitor-set change selects semantic/normalized adaptation on the mapped
+monitor. Legacy snapshots without normalized data retain DPI scaling but pass through the same
+work-area clamp, so adaptation cannot produce a fully off-screen rectangle. `ShowCmd` is applied
+after normal bounds and remains independent of maximized/minimized state.
+
+For a normal window, capture also observes `DWMWA_EXTENDED_FRAME_BOUNDS` and uses those visible
+bounds for normalized/semantic geometry. Exact topology continues to preserve the original
+`WINDOWPLACEMENT` rectangle. Adapted semantic targets are expressed as visible bounds; the native
+mutation boundary subtracts/adds the live window's invisible resize-border insets before calling
+`SetWindowPlacement`, and verification compares the resulting visible frame. This prevents the
+common Windows border width from becoming a visible gap at monitor edges.
+
+### Restore plan execution and staleness
+
+`RestoreExecutor` is the only boundary that turns an approved `RestorePlan` into process, browser,
+or window mutations. It executes only actions already present in that plan through injectable
+process-launch, browser-session, window-inventory/mutation, resource-validation, readiness-probe,
+and clock boundaries. Browser restoration is itself an explicit plan action; its ordinary-browser
+fallback is also explicit and conditional on that action becoming unavailable.
+
+The executor façade invokes fixed internal phase objects in order:
+
+1. `RestorePreflightPhase` validates candidate inventory, selected HWNDs, launch resources, and
+   browser capability before mutation.
+2. `RestoreBrowserAndLaunchPhase` performs the approved browser action, positions existing
+   windows, executes approved launches, and owns final minimization.
+3. `RestoreReadinessPhase` correlates only successful related activity with newly observed stable,
+   responsive windows.
+4. `RestorePlacementVerificationPhase` re-observes assignments and performs bounded retries.
+5. `RestoreResultAggregator` creates ordered public entry/action results from the shared
+   `RestoreExecutionContext`.
+
+All phases share the same assigned-HWND set and `RestoreWindowRevalidator`. They do not cache native
+inventory across phase boundaries or start parallel mutations.
+
+Immediately before each placement, the executor enumerates eligible windows again and verifies the
+approved HWND, PID, and saved identity. Immediately before each launch, it revalidates the approved
+file, folder, URL, executable, or packaged-app identity. Closed/reused HWNDs and changed resources
+produce structured `RestoreExecutionResult` stale-plan outcomes and receive no mutation. The
+approved assignment remains session-wide. After an approved launch, the executor uses the
+readiness engine below; no fixed restore sleep remains.
+
+Candidate-set staleness is directional: a newly appearing eligible HWND was not reviewed and
+invalidates the plan, while disappearance of an unselected candidate is safe. The latter is
+required by workspace switching because its own approved close phase intentionally removes
+unrelated candidates before the destination plan executes. A selected HWND disappearing or being
+reused by another PID still invalidates the plan.
+
+### Virtual-desktop association
+
+Virtual-desktop association is an explicit, off-by-default Windows 10/11 preference. At capture,
+`VirtualDesktopAssociationService` calls only the documented Shell
+`IVirtualDesktopManager.GetWindowDesktopId(HWND)` and
+`IsWindowOnCurrentVirtualDesktop(HWND)` methods. The ordinary policy continues to reject every
+DWM-cloaked surface. A narrow opt-in path admits a window only when Windows reports that it is not
+on the current desktop, DWM identifies Shell cloaking, and the same ownership/style/title/bounds
+task-window checks pass with the cloak removed. Application-cloaked, inherited, tool, shell-chrome,
+and non-activatable surfaces remain excluded. The Save dialog groups the resulting windows by
+observed desktop GUID and monitor; because the supported interface exposes no names or ordering,
+it labels groups as current or deterministic inactive desktops rather than guessing Windows' UI
+number.
+
+The same narrow inventory path applies to restore matching, so a window on an inactive desktop is
+reused instead of duplicated. At planning, a valid GUID produces a
+`MoveWindowToVirtualDesktop` action only for a safely selected live match. An explicit Restore
+Preview match retains that GUID and receives the same action.
+
+At execution, the HWND is revalidated again before the documented
+`IVirtualDesktopManager.MoveWindowToDesktop(HWND, GUID)` call. The service never calls an
+undocumented interface and has no code path to create, enumerate, name, or switch desktops. A
+missing, rejected, unsupported, or unavailable GUID is an action-level `Skipped` outcome; it does
+not fail the restore or hide/close the window. This boundary follows Microsoft's guidance that
+apps should not automatically switch the user between desktops.
+
+### Application readiness
+
+`SystemAppReadinessProbe` captures one shared read-only observation per poll: eligible live
+windows, running process names, and HWND responsiveness. It deliberately avoids
+`WaitForInputIdle`, which is unreliable for UWP/MSIX and multi-process browser applications.
+
+`AppReadinessEngine` combines those facts with the existing ambiguity-safe `WindowMatcher` and
+per-entry stability memory. The generic strategy reports `NotStarted`, `ProcessStarted`,
+`WindowFound`, `Ready`, `TimedOut`, or `Failed`. A window becomes generically ready only when it is
+safely assignable, responsive, and has retained the same HWND/PID/title/class/bounds signature for
+the configured number of observations.
+
+`AppReadinessStrategyRegistry` selects the first injected `IAppReadinessStrategy` that claims the
+saved identity, then falls back to `GenericAppReadinessStrategy`. An adapter may replace the
+generic readiness rule but cannot select a different or ambiguous window: matching remains owned
+by `WindowMatcher`, and `Ready` without a selected candidate is rejected as `Failed`.
+
+The executor polls every pending entry from the shared observation at 250 ms intervals with a
+45-second monotonic wall-clock timeout and cancellation on every wait. Before polling, each wait
+must correlate to a successful launch for the same entry/stable application identity or to its
+successful browser-session action; unrelated launches cannot start passive timeouts.
+Probe/enumeration work is included in that budget rather than counting only requested delays. Entries are tracked independently: a ready
+entry is revalidated and positioned immediately while slower entries keep polling. Timeout and
+failure states are carried in structured action/entry results; privacy-safe diagnostic events
+record the stable entry ID, strategy, and timeout without window titles or paths.
+
+### Post-restore placement verification
+
+After every initially matched or newly ready window has been positioned, `RestoreExecutor` runs a
+bounded verification phase. `SystemWindowPlacementProbe` re-reads the exact assigned HWND's normal
+bounds, visible DWM frame, `ShowCmd`, and DPI. `WindowPlacementVerifier` compares the coordinate
+representation used by the immutable target (outer bounds for exact placement, visible frame for
+semantic adaptation) with a default eight-pixel tolerance scaled to target DPI, and classifies the
+observation as `Applied`, `Settling`, `Rejected`, `MovedByApp`, or `WindowGone`.
+
+All assigned windows share the wait phase, so verification adds one short settling interval rather
+than one delay per window. A mismatch is revalidated against the original PID and saved identity,
+then the same assigned HWND receives at most two correction attempts. An HWND that is closed,
+reused, or no longer eligible is never replaced silently. Immediate post-mutation observations
+distinguish a placement the app later moved from one it never accepted.
+
+`IWindowPlacementVerificationStrategy` may override delay, tolerance, and retry count for a known
+application family; matching and HWND ownership remain outside the adapter. Verification ends with
+the restore invocation and never becomes a background layout guard, so later user movement is not
+fought. Entry/action execution results carry final state, retry count, strategy, and tolerance;
+failed verification changes the overall result to `CompletedWithFailures` and is summarized in the
+user-facing restore warning and privacy-safe structured log.
+
+### File Explorer tab reconciliation
+
+Windows 11 exposes Explorer tabs through `Shell.Application` automation but no public supported
+session-restore API. `ExplorerTabSessionService` groups the per-tab Shell browser objects by their
+top-level `CabinetWClass` HWND, obtains each `ShellTabWindowClass` handle through `IShellBrowser`,
+and records all folder locations plus the active tab. Capture and restore COM work is serialized on
+one background STA thread so UI, test, and worker callers observe the same tab handles.
+
+After launch readiness and placement verification, the executor revalidates the assigned Explorer
+HWND. It consumes matching locations as a multiset, opens only missing occurrences, navigates each
+new tab through its Shell browser object, and reselects the saved active occurrence. It does not
+close unrelated tabs. Missing folders or a changed/replaced HWND produce a typed partial failure
+instead of global keyboard input or destructive reconciliation. Tab paths are included only when
+the user enables file/folder capture, are redacted from diagnostic plans, and are removed from
+portable-redacted exports.
+
+### Restore preview and approval
+
+`RestorePlanPreviewBuilder` projects the immutable plan into exact, adapted, ambiguous, missing,
+ready, skipped, and cancelled entry states plus move, launch, browser, wait, minimize, and no-change
+action labels. It never reads live state. `RestorePlanPreviewDialog` renders only this projection,
+uses keyboard-focusable entry checkboxes and automation labels, and distinguishes blocking errors
+from destructive minimize actions. The selected mode and resolved per-entry policy are shown in
+the preview. Preview Only always opens this dialog and its only terminal action closes the preview;
+the executor independently rejects a preview-only plan. In switch mode the dialog also explains that approved destination HWNDs
+will be preserved while unrelated windows receive normal close requests after approval.
+
+For an ambiguous entry the projection also carries only the close candidate set, with title,
+process/class, monitor, bounds, confidence, score, and explained evidence. Radio-button selection
+calls `RestorePlanner.ResolveAmbiguousMatch`, which verifies session-wide HWND ownership and derives
+a new plan without observing the desktop. Optional “Remember this choice” data is persisted only
+after the approved execution completes successfully; Settings can clear every learned choice.
+
+Unchecking an entry calls `RestorePlanner.DeriveApprovedPlan`. The derived plan retains the original
+candidate evidence and placement but removes that entry's actions and blocking errors without
+changing the preview object. Its selected HWND is protected from align/minimize. Disabling an
+ordinary-browser entry also removes the global browser-session action and makes enabled browser
+fallbacks explicit, preventing the connector from recreating a disabled entry.
+
+Manual tray, Settings, and hotkey restores all pass through `RestorePreviewPolicy`. When
+`AppSettings.ShowRestorePreview` is enabled, they show the review dialog normally. When disabled,
+an executable plan proceeds directly; a blocked or ambiguous plan still opens the dialog because
+it requires the user to disable an entry or choose a candidate. Approved plans pass to
+`ExecuteApprovedRestorePlanAsync`.
+Before any mutation, the executor compares the current eligible candidate inventory with the
+preview and revalidates every referenced resource. Changed state returns `StalePlan`, displays a
+clear retry message, and is never silently replanned. Switch commands use the same preview before
+entering the close phase. Startup and display-change restores retain their one-click compatibility
+path.
+
+### Single-flight workspace switching
+
+`WorkspaceSwitchEngine` owns switch cancellation and serialization. A new approved switch cancels
+the previous invocation and waits for its lease, preventing overlapping poll/notification loops.
+The engine preserves HWNDs referenced by approved `RestoreExistingWindow` actions plus handles
+protected by never-close, ignore-during-switch, disabled-entry, or ambiguity policy; it sends `WM_CLOSE`
+to other close candidates, and polls only the returned requested-handle set with unfiltered HWND
+liveness checks. The two-minute limit is measured by `Stopwatch` wall time. Count changes remain in
+structured logs, while user waiting notifications are rate-limited to at most one per 30 seconds.
+When the requested set clears, the exact reviewed plan executes; owned/transient risk windows never
+hold the switch open merely because they were visible to preflight.
+
+`PersistentApplicationPolicy` adds one global protection source without creating another restore
+or placement model. Settings store normalized executable filenames and/or AppUserModelIDs. Matching
+live identities inherit the existing never-close behavior across workspaces, are removed from the
+unrelated-window risk count, and never match by title.
+
+`LayoutCoordinator` wraps the entire switch—including the close phase—in the shared restore
+transaction gate. Exact Switch always makes the current desktop durable before
+`WorkspaceSwitchEngine` can send its first `WM_CLOSE`; routine non-destructive operations consult
+the checkpoint preference. The same gate prevents overlapping mutation even when routine capture
+is disabled. A superseding switch cancels the older transaction token whether the older request is
+still capturing or is already waiting for windows to close.
+
+Manual restore/switch workflows display `RestoreProgressReport` in a non-modal, cancellable
+progress window. Checkpoint capture, browser work, launches, readiness, close polling, and placement
+verification report distinct stages; the service/executor remain UI-independent through
+`IProgress<RestoreProgressReport>`. A UI-side timer advances the elapsed display between reports,
+so a long synchronous observation or resource read remains visibly timed instead of appearing
+frozen at `0:00`.
+
+### Transactional checkpoint and undo
+
+Every executable user-facing restore plan enters `WorkspaceService`'s single transaction gate.
+`AppSettings.CreateRestoreCheckpoints` controls whether that serialized operation performs the
+checkpoint capture for routine Repair, Move Existing, Resume, and adaptive restore. The default is
+disabled. Exact Switch and Undo always require a checkpoint because they close or replace desktop
+state. A skipped routine checkpoint records a `Disabled` outcome and proceeds under the same
+single-flight gate without capture latency or a new undo point.
+`CaptureWorkspaceAsync` records the current windows, placements/states, launch-resource metadata,
+monitor topology, and optional browser-session metadata; it never captures screenshots or document
+contents. `CheckpointRepository.Save` is then the durability boundary. The approved executor (or
+switch close phase) is not called unless the checkpoint payload was atomically committed.
+
+Checkpoint capture uses a fast recovery profile: title parsing, Explorer folder paths, PWA
+identity, and browser metadata remain available, while all Jump List parsing and the recursive
+Documents/Desktop/Downloads/OneDrive fallback are skipped. Named workspace saves retain
+comprehensive Jump List discovery, but all Tier-3 folder traversals share one five-second
+cumulative budget and honor cancellation. This prevents checkpoint creation from making a
+reviewed HWND plan stale while it spends tens of seconds scanning unrelated or locked files.
+
+`RestoreCheckpointOutcome` is attached to the structured execution result. A persistence failure
+produces a rejected result and zero native/process/browser mutation; cancellation before commit
+produces a cancelled result and zero mutation. A later executor failure leaves the committed
+checkpoint available.
+
+“Undo Last Restore” selects the newest healthy, non-expired checkpoint, builds the same restore
+plan with Exact Switch policy, and sends it through the workspace-switch reconciliation path. Windows absent from the
+checkpoint are therefore closed normally rather than left behind, while saved windows use the
+same staleness, readiness, placement, and verification phases. Undo uses the `Undo` trigger and,
+before its first close request, commits the state being replaced so undo-of-undo remains possible.
+Because Undo is destructive reconciliation, its pre-undo checkpoint is mandatory even when routine
+checkpoint capture is disabled.
+
+### Settings UI ownership
+
+`SettingsWindow.xaml` remains one visual tree so WPF namescopes, routed events, keyboard focus,
+theme resources, and DPI behavior do not change. Its code-behind is a partial class split by
+feature: the root lifecycle/browser/notification surface, startup/default-workspace behavior,
+hotkey recording, restore-workflow preferences, monitor aliases, and workspace-list actions.
+Binding row models remain in
+`SettingsRows.cs`, and both tray and Settings save commands continue through
+`SaveWorkspaceWorkflow`.
+
+`HelpReferenceWindow` is a separate, reusable WPF surface rather than a second settings tree. A
+fresh interactive installation opens it once with direct Save Workspace, Settings, and Dismiss
+actions. `FirstRunOnboardingPolicy` suppresses it for minimized startup, unreadable settings, and
+installations that already contain workspaces; native-messaging startup exits before interactive
+services or UI are created. The completion flag is committed before presentation to prevent
+repeat-launch spam. The identical window remains reachable from the tray and Settings and contains
+the user-facing contract for restore modes, per-entry policies, preview/checkpoint settings,
+matching, privacy, and known application limits.
+
+### `WorkspaceService`
+The main capture/restore orchestration service. Called by `LayoutCoordinator` and directly by UI
+code. Snapshot construction and persistence are deliberately separate boundaries.
+
+- **`CaptureWorkspaceAsync(...)`** — the reusable capture operation for named workspaces,
+  checkpoints, and temporary captures. `WorkspaceSnapshotBuilder` gets current topology, enumerates
+  windows, filters selected monitors, and builds entries through `CapturedWindowEntryFactory` and
+  `CaptureResourceResolver` without persistence. `WorkspaceCaptureBuilder` then requests optional
+  browser metadata, attaches returned sessions, and returns one `WorkspaceCaptureResult`.
+  Browser status is explicit: `Captured`, `Unavailable`, `TimedOut`, `Skipped`, or `Failed`.
+- **`PersistCapture(result, destination, policy)`** — the sole final commit for a capture. The
+  caller chooses the typed repository and explicitly allows a partial window-only save or requires
+  complete browser capture. A capture is never persisted before browser capture finishes.
+- **`RestoreWorkspaceWithExecutionResultAsync(snapshot, mode, token)`** — the automatic restore pipeline:
+    1. Observe live windows, monitor topology, resources, and browser-session capability without
+       mutation, then build an immutable `RestorePlan`.
+    2. Serialize restore operations and, when configured, atomically persist a complete
+       pre-mutation checkpoint. If a required checkpoint fails, return a structured rejection
+       without invoking the executor.
+    3. Pass that plan to `RestoreExecutor`, which revalidates every external target immediately
+       before executing its approved action.
+    4. Poll launched entries for safe identity, responsiveness, and stable title/class/bounds;
+       position each ready entry immediately while preserving one-to-one HWND assignment.
+    5. Return structured per-action and per-entry outcomes.
+- **`CreateRestorePlan(snapshot, mode)`** — performs the read-only observation and pure planning
+  phases for preview or explicit approval workflows.
+- **`ExecuteApprovedRestorePlanAsync(snapshot, plan, token)`** — executes an already-approved plan
+  behind the transaction gate, optionally checkpointing first and reporting stale preconditions
+  without silently replanning.
+- **`UndoLastRestoreAsync(token)`** — service-level restore of the newest eligible checkpoint;
+  the tray's full-desktop Undo command uses `LayoutCoordinator` so unrelated windows are also
+  reconciled. A new pre-undo safety checkpoint is created only when enabled.
+
+The obsolete synchronous capture wrapper, unstructured restore-result adapter, and test-only
+matching/session compatibility types were removed after their assertions moved to these active
+boundaries.
+
+`WorkspaceService` composes focused collaborators rather than owning their policy inline:
+
+- `WorkspaceCheckpointService` owns checkpoint admission, capture profile, persistence, and result.
+- `WorkspaceRestoreDiagnosticsService` records stage timings and publishes the latest typed report.
+- `WorkspaceLayoutVariantService` selects/applies topology-specific placement variants.
+- `RestoreObservationBuilder`, `WorkspaceSnapshotBuilder`, and `WorkspaceCaptureBuilder` own
+  observation and capture construction behind the façade.
+
+### `StorageService`
+Atomic, versioned JSON persistence and migration. Workspace schema v10 combines stable identities,
+semantic layout, Resume-compatible mode/per-entry policy, topology-specific layout variants, the
+persisted VS Code workspace target kind, stable browser-session metadata, per-window Explorer
+tab sessions, and explicitly confirmed Windows Terminal tab profiles/directories; v2-v9 and legacy
+profile documents migrate without inventing unavailable geometry or changing restore behavior.
+When a same-name recapture replaces a named workspace, its default mode is retained and stable IDs
+and entry policies are carried across only for identities that are unique in both snapshots.
+`StorageService` remains the application-facing
+compatibility façade; typed repositories prevent permanent, recovery, and short-lived artifacts
+from being mixed.
+
+- **Storage paths** (under `%AppData%\SuKe\`):
+    - `workspaces/{workspaceId}.workspace.json` — permanent named workspaces.
+    - `checkpoints/{workspaceId}.checkpoint.json` — recovery checkpoints.
+    - `checkpoints/checkpoint-index.json` — versioned, reconstructable recovery metadata index.
+    - `temporary-captures/{workspaceId}.temporary.json` — short-lived captures.
+    - `settings.json` — versioned application settings (schema v8) with ID-based workspace
+      references, composite learned window-match hints, preview/checkpoint preferences, persistent
+      app identities, logical path aliases, rescue threshold, browser-tab restore preference, and
+      first-run completion flag. The
+      v4-to-v5 migration marks existing installations complete so an upgrade is never
+      misrepresented as a first launch.
+    - `last_fingerprint.txt` — persists the last-known fingerprint across restarts.
+    - `.migrated_v2` — completion marker for the legacy monitor-profile import only.
+- `NamedWorkspaceRepository`, `CheckpointRepository`, and `TemporaryCaptureRepository` enumerate
+  only their own directory and extension. Checkpoint or expiry cleanup therefore cannot discover or
+  delete permanent workspaces.
+- `CheckpointRepository` stamps recovery schema version, stable checkpoint ID, trigger, UTC
+  creation/expiry, source topology fingerprint, and target workspace ID. It keeps at most ten
+  healthy checkpoints for seven days by default; newest healthy documents remain available when a
+  corrupt peer is encountered. Retention and index maintenance run only inside the checkpoint
+  directory.
+- Documents are serialized and validated before an atomic writer creates a sibling temporary file,
+  flushes it to disk, and replaces/moves it into place. Interrupted commits leave the previous final
+  document intact; incomplete `.tmp` files are never enumerated as artifacts.
+- Workspace display names are metadata. Stable `WorkspaceId` values are the filename/storage
+  identity, so names that sanitize to the same filename can coexist.
+- Workspace schema migrations run in order before deserialization. Current documents carry a stable `WorkspaceId`; every entry carries an `EntryId`.
+- Settings migrations replace legacy workspace-name references with stable workspace IDs.
+- Repository loads return healthy documents plus structured corruption, validation, unsupported-
+  version, and I/O issues. One bad file does not prevent healthy documents from loading.
+- Future schema versions and invalid documents are reported and left untouched.
+- Legacy `profiles/*.profile.json` files are imported with deterministic IDs. The completion marker is written only when every legacy source succeeds.
+- Legacy name-addressed workspace files are discovered only for migration. The ID-addressed copy is
+  committed before the legacy source is removed.
+- `LogicalPathAliasResolver` records the most-specific `${ALIAS}` form alongside each local path.
+  Restore observes the exact saved path first, then the current device mapping, then existing repair
+  behavior; an unavailable mapping never rewrites the workspace.
+- `WorkspaceTransferService` owns local-only WA-033 transfers: category-controlled exact and
+  portable/redacted exports use the atomic writer; staged imports validate size/schema, migrate
+  transfer v1 and supported workspace payloads, preview stable-ID/name collisions, detect a file
+  changed after preview, and always import a separate copy. It never transfers app settings,
+  credentials, cookies, document contents, or native browser-host data.
+- `ISyncProvider` and `FolderSyncProvider` are partial WA-034 transport groundwork. Provider writes
+  are atomic and transport-neutral, but staged local migration/validation, manifests, device IDs,
+  conflict copies, retries, exclusions, orchestration, and UI are intentionally not claimed.
+
+### `LayoutCoordinator`
+Reacts to `WM_DISPLAYCHANGE` events forwarded from `App.xaml.cs`.
+
+- **`HandleDisplayChangeAsync()`** — cancels a superseded event and waits through
+  `DisplayTopologyStabilizer` until the complete topology signature is unchanged for the settle
+  interval. `TemporaryDisplayRecoveryTracker` records a departure and acts only when that exact
+  prior signature returns; it does not reposition windows during the excursion. The default mode
+  offers the saved layout once from the tray, while disabled and automatic modes are persisted in
+  Settings. Automatic recovery uses the mandatory `AutomaticDisplayRestore` checkpoint trigger and
+  is converted to a tray offer when the foreground window covers its monitor. Startup readiness
+  uses the same stabilizer.
+- **`UndoLastRestoreAsync()`** — reconciles the latest checkpoint through the close-and-restore
+  switch engine and reports checkpoint-gate or restore failures without treating them as success.
+- Owns all notification balloon calls via the private `NotifyBalloon` helper, which marshals to the UI thread.
+
+SuKe's tray notifications are controlled by `AppSettings.NotificationsEnabled`. The final `App.ShowBalloon` display method checks this setting, so notifications initiated by startup, save, restore, switch, and display-change flows all follow the same preference. The setting only suppresses SuKe messages; it does not change Windows notification or Focus Assist state.
+
+### `JumpListService`
+Reads the Windows Jump-List AutoDestList binary files from `%AppData%\Microsoft\Windows\Recent\AutomaticDestinations\` using the OpenMcdf library to extract recently-opened file paths per application.
+
+### `TitleParser`
+Stateless utility class. `ExtractFilePath(processName, titleSnippet)` applies a set of regular expressions to the window title to extract a file path and returns a `(path, confidence)` tuple.
+
+### Restore simulation
+
+`RestoreSimulationRunner` loads versioned, human-readable synthetic snapshots, topology, live
+identity, resource, browser, hint, and persistent-app observations and calls only `RestorePlanner`.
+`--simulate-restore <fixture.json>` prints a deterministic redacted plan plus golden expectation
+failures and never constructs a Win32 inventory or mutation boundary. See
+[`restore-simulation.md`](restore-simulation.md) for the command and complete fixture matrix.
+
+---
+
+## Data Flow: Save
+
+```
+User clicks "Save Workspace"
+    → SaveWorkspaceDialog collects name + monitor selection
+    → WorkspaceService.CaptureWorkspaceAsync(...)
+        → WorkspaceSnapshotBuilder builds window entries without persistence
+            → MonitorService.GetCurrentMonitors()
+            → WindowService.SnapshotWindows(CaptureCandidate, monitors)
+            → CaptureResourceResolver uses TitleParser + bounded Jump List/folder discovery
+            → CapturedWindowEntryFactory creates WorkspaceEntry variants
+        → IBrowserSessionConnector captures optional browser sessions, opaque profile identity,
+          runtime window IDs, and safe unique desktop-entry/monitor links
+        → WorkspaceCaptureResult records browser outcome and complete snapshot
+    → WorkspaceService.PersistCapture(result, NamedWorkspace, SavePartialWorkspace)
+        → one atomic named-workspace commit
+```
+
+## Data Flow: Restore
+
+```
+Manual tray/Settings/hotkey request
+    → WorkspaceService.CreateRestorePlan(snapshot, mode)
+        → observe inventory, resources, browser capability, and monitor topology
+        → RestorePlanner.Build(...) returns immutable intent
+    → RestorePreviewPolicy consults the setting and plan executability
+    → optional RestorePlanPreviewDialog collects choices and disabled entry IDs
+    → RestorePlanner.DeriveApprovedPlan(original, disabled IDs)
+    → WorkspaceService.ExecuteApprovedRestorePlanAsync(snapshot, approved plan)
+        → optional CaptureWorkspaceAsync(current desktop)
+        → when enabled, CheckpointRepository atomically commits + bounds recovery history
+        → RestoreExecutor
+            → preflight approved external references
+            → profile-scoped browser tab reuse or duplicate/conflict handling, then existing-window/launch mutations
+            → correlated readiness
+            → placement verification and bounded retry
+            → final minimization and ordered result aggregation
+
+Startup request
+    → LayoutCoordinator automatic restore route
+        → WorkspaceService.RestoreWorkspaceWithExecutionResultAsync(snapshot, mode)
+            → build the same immutable plan
+            → checkpoint, then execute through the same preflight and mutation boundary
+            → retain one-click behavior without opening preview UI
+
+Display-change request
+    → DisplayTopologyStabilizer waits for a settled signature
+    → TemporaryDisplayRecoveryTracker records departure, then recognizes only its return
+    → disabled: no offer; ask-first: tray Restore/Dismiss offer; automatic: checkpointed restore
+    → fullscreen foreground activity converts automatic recovery to the same tray offer
+
+Undo Last Restore
+    → CheckpointRepository.GetLatest() isolates corrupt/expired documents
+    → RestorePlanner.Build(checkpoint, current inventory, topology, ExactSwitch)
+    → capture + commit a new mandatory Undo safety checkpoint
+    → WorkspaceSwitchEngine closes unrelated windows
+    → RestoreExecutor executes and verifies the checkpoint plan
+```
+
+---
+
+## Models
+
+| Type | Purpose |
+|---|---|
+| `WorkspaceSnapshot` | Top-level save artifact. Contains a list of `MonitorInfo` and a list of `WorkspaceEntry`. |
+| `WorkspaceEntry` | One saved window: app identity, optional file path, window position, and monitor assignment. |
+| `LayoutVariant` | Topology-specific monitor and placement set for one logical workspace. |
+| `MonitorInfo` | Physical monitor metadata: stable ID, friendly name, geometry, index, primary flag. |
+| `WindowRecord` | Captured state of a live window: DPI-aware normalised rect, class name, title snippet, process name, executable path. |
+| `RestorePlan` | Immutable restore intent, including candidates, placements, actions, warnings, blockers, and global actions. |
+| `RestoreExecutionResult` | Structured stale-plan, per-action, and per-entry execution outcomes. |
+| `WorkspaceCheckpointMetadata` | Versioned recovery identity, trigger, lifetime, source topology, and target workspace reference. |
+| `RestoreCheckpointOutcome` | Created/disabled/failed/cancelled gate result attached to restore execution. |
+| `RestorePlanPreview` | UI-safe projection of a plan; it contains display state but performs no observation or mutation. |
+
+---
+
+## Adding a New Service
+
+1. Create the file under the ownership folder that matches the table above, for example
+   `Services/Restore/MyRestorePolicy.cs`, while retaining the established
+   `SuKe.Services` namespace unless a narrower namespace already exists.
+2. Add a `<summary>` XML doc comment on the class and all public members.
+3. Register the service as a singleton in `App.xaml.cs` alongside the existing services.
+4. Inject it via the constructor of any service that needs it.
+5. Use the structured `AppLogger` overloads for all diagnostic output — never `Debug.WriteLine`.
+
+## Diagnostic logging and privacy
+
+`AppLogger` writes JSON-lines events with a stable event ID, severity, static message, named fields, and optional exception metadata. Sensitive values must be carried in `LogField` instances so the centralized `LogRedactor` can apply the correct policy:
+
+- Paths retain only their extension in shareable exports.
+- URLs retain only their origin; credentials, path, query, and fragment are removed.
+- Titles and workspace names are replaced with category markers.
+- Stable identifiers become deterministic pseudonyms, preserving correlation across events.
+- Command lines are scrubbed for credential switches, then redacted for embedded paths and URLs.
+- Secrets are removed even from local diagnostic logs.
+
+The local minimum severity comes from `AppSettings.DiagnosticLogLevel`. `AppLogger.ExportDiagnostics` defaults to `LogRedactionMode.Redacted`; the `--export-diagnostics [destination]` command-line option exposes that safe default without requiring manual log editing. Legacy unstructured messages are omitted from shareable exports because their sensitivity cannot be classified reliably.

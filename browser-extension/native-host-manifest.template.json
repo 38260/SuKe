@@ -1,0 +1,9 @@
+{
+  "name": "com.suke.browser",
+  "description": "SuKe browser-session native messaging host",
+  "path": "C:\\Program Files\\SuKe\\SuKe.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://REPLACE_WITH_PUBLISHED_EXTENSION_ID/"
+  ]
+}

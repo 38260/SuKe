@@ -1,0 +1,400 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using SuKe.Native;
+
+namespace SuKe.Services;
+
+/// <summary>Policy-free bounds observed for a native top-level window.</summary>
+public readonly record struct WindowBounds(int Left, int Top, int Right, int Bottom)
+{
+    public int Width => Right - Left;
+    public int Height => Bottom - Top;
+}
+
+/// <summary>
+/// Raw facts observed for one native top-level window. Product decisions such as whether the
+/// window is saved, matched, closed, counted as a switch risk, or minimized are intentionally
+/// absent from this model.
+/// </summary>
+public sealed record ObservedWindow(
+    IntPtr Hwnd,
+    uint ProcessId,
+    IntPtr OwnerHwnd,
+    bool IsVisible,
+    string ClassName,
+    string Title,
+    WindowBounds? Bounds,
+    string ExecutablePath,
+    string ProcessName,
+    string AppUserModelId,
+    long ExtendedStyle = 0,
+    bool IsCloaked = false,
+    IntPtr RootOwnerHwnd = default,
+    IntPtr TaskSwitcherRepresentativeHwnd = default,
+    WindowBounds? VisibleBounds = null,
+    uint CloakState = 0,
+    IntPtr TaskProxyOwnerHwnd = default,
+    bool IsMinimized = false,
+    WindowBounds? NormalBounds = null,
+    bool ObservationFailed = false);
+
+/// <summary>Named product policy applied to raw native window observations.</summary>
+public enum WindowCandidatePolicy
+{
+    CaptureCandidate,
+    RestoreMatchCandidate,
+    SwitchCloseCandidate,
+    SwitchRiskCandidate,
+    MinimizeCandidate
+}
+
+/// <summary>Policy-free source of native top-level window observations.</summary>
+public interface IRawWindowInventory
+{
+    IReadOnlyList<ObservedWindow> EnumerateWindows();
+    bool IsWindowAlive(IntPtr hWnd);
+}
+
+/// <summary>Native implementation of the raw top-level window inventory.</summary>
+public sealed class WindowInventory : IRawWindowInventory
+{
+    private static readonly IPackagedAppResolver PackagedApps = new PackagedAppResolver();
+
+    public IReadOnlyList<ObservedWindow> EnumerateWindows()
+    {
+        var windows = new List<ObservedWindow>();
+
+        bool completed = NativeMethodsWindow.EnumWindows((hWnd, _) =>
+        {
+            try { windows.Add(ObserveWindow(hWnd)); }
+            catch
+            {
+                windows.Add(new ObservedWindow(hWnd, 0, IntPtr.Zero, false, "", "", null, "", "", "",
+                    ObservationFailed: true));
+            }
+            return true;
+        }, IntPtr.Zero);
+        if (!completed)
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Top-level window enumeration failed.");
+
+        return ResolveTaskProxyWindows(windows);
+    }
+
+    // Some frameworks put the taskbar/desktop identity on an invisible or zero-area owner,
+    // while the real application UI is its owned popup. Never substitute a popup for an
+    // ordinary, independently capturable root (e.g. an editor's temporary Save dialog).
+    internal static IReadOnlyList<ObservedWindow> ResolveTaskProxyWindows(IReadOnlyList<ObservedWindow> windows)
+    {
+        var byHandle = windows.ToDictionary(window => window.Hwnd);
+        return windows.Select(window =>
+        {
+            if (window.OwnerHwnd == IntPtr.Zero || window.RootOwnerHwnd == window.Hwnd ||
+                window.TaskSwitcherRepresentativeHwnd != window.Hwnd ||
+                !byHandle.TryGetValue(window.RootOwnerHwnd, out var root) ||
+                root.ProcessId == 0 || root.ProcessId != window.ProcessId ||
+                root.OwnerHwnd != IntPtr.Zero ||
+                root.TaskSwitcherRepresentativeHwnd != window.Hwnd ||
+                (root.IsVisible && root.Bounds is not { Width: <= 0 } and not { Height: <= 0 }) ||
+                !WindowPolicyEvaluator.IsPrimaryTaskWindow(root with { IsVisible = true, IsCloaked = false }))
+                return window;
+
+            return window with { TaskProxyOwnerHwnd = root.Hwnd };
+        }).ToArray();
+    }
+
+    public bool IsWindowAlive(IntPtr hWnd) => NativeMethodsWindow.IsWindow(hWnd);
+
+    private static ObservedWindow ObserveWindow(IntPtr hWnd)
+    {
+        bool isVisible = NativeMethodsWindow.IsWindowVisible(hWnd);
+        bool isMinimized = NativeMethodsWindow.IsIconic(hWnd);
+        var placement = new NativeMethodsWindow.WindowPlacement
+        {
+            Length = Marshal.SizeOf<NativeMethodsWindow.WindowPlacement>()
+        };
+        WindowBounds? normalBounds = NativeMethodsWindow.GetWindowPlacement(hWnd, ref placement)
+            ? new WindowBounds(placement.RcNormalPosition.Left, placement.RcNormalPosition.Top,
+                placement.RcNormalPosition.Right, placement.RcNormalPosition.Bottom)
+            : null;
+        IntPtr ownerHwnd = NativeMethodsWindow.GetWindow(hWnd, NativeMethodsWindow.GW_OWNER);
+        long extendedStyle = NativeMethodsWindow
+            .GetWindowLongPtr(hWnd, NativeMethodsWindow.GWL_EXSTYLE)
+            .ToInt64();
+        IntPtr rootOwnerHwnd = NativeMethodsWindow.GetAncestor(
+            hWnd,
+            NativeMethodsWindow.GA_ROOTOWNER);
+        if (rootOwnerHwnd == IntPtr.Zero)
+            rootOwnerHwnd = hWnd;
+        IntPtr taskSwitcherRepresentativeHwnd = FindTaskSwitcherRepresentative(rootOwnerHwnd);
+        bool isCloaked = NativeMethodsWindow.DwmGetWindowAttribute(
+                hWnd,
+                NativeMethodsWindow.DWMWA_CLOAKED,
+                out uint cloakState,
+                sizeof(uint)) == 0 &&
+            cloakState != 0;
+
+        var className = new StringBuilder(256);
+        int classNameLength = NativeMethodsWindow.GetClassName(hWnd, className, className.Capacity);
+        string observedClassName = classNameLength > 0 ? className.ToString() : "";
+
+        var title = new StringBuilder(256);
+        int titleLength = NativeMethodsWindow.GetWindowText(hWnd, title, title.Capacity);
+        // A zero title length is valid for untitled top-level windows and is not logged as failure.
+        string observedTitle = titleLength > 0 ? title.ToString() : "";
+
+        WindowBounds? bounds = null;
+        if (NativeMethodsWindow.GetWindowRect(hWnd, out var rect))
+            bounds = new WindowBounds(rect.Left, rect.Top, rect.Right, rect.Bottom);
+        WindowBounds? visibleBounds = null;
+        if (NativeMethodsWindow.DwmGetWindowAttribute(
+                hWnd,
+                NativeMethodsWindow.DWMWA_EXTENDED_FRAME_BOUNDS,
+                out NativeMethodsWindow.Rect visibleRect,
+                Marshal.SizeOf<NativeMethodsWindow.Rect>()) == 0 &&
+            visibleRect.Right > visibleRect.Left &&
+            visibleRect.Bottom > visibleRect.Top)
+        {
+            visibleBounds = new WindowBounds(
+                visibleRect.Left,
+                visibleRect.Top,
+                visibleRect.Right,
+                visibleRect.Bottom);
+        }
+
+        uint threadId = NativeMethodsWindow.GetWindowThreadProcessId(hWnd, out uint processId);
+        // A zero result means the process could not be identified; retain the raw window with
+        // PID 0 so policy evaluation can still use its other facts.
+        if (threadId == 0)
+            processId = 0;
+        string executablePath = "";
+        string processName = "";
+        try
+        {
+            using var process = Process.GetProcessById((int)processId);
+            processName = process.ProcessName;
+        }
+
+        catch
+        {
+            // Elevated or short-lived processes may not be queryable. The remaining raw facts
+            // are still useful to switch-risk policy and should not be discarded.
+        }
+
+        executablePath = QueryExecutablePath(processId);
+        if (string.IsNullOrEmpty(processName) && !string.IsNullOrEmpty(executablePath))
+            processName = Path.GetFileNameWithoutExtension(executablePath);
+
+        string appUserModelId = WebAppService.GetWindowAppUserModelId(hWnd);
+        if (string.IsNullOrEmpty(appUserModelId) &&
+            executablePath.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase))
+        {
+            appUserModelId = WebAppService.GetProcessAppUserModelId(processId);
+            if (string.IsNullOrEmpty(appUserModelId))
+            {
+                appUserModelId = PackagedApps.Resolve(executablePath)?.AppUserModelId ?? "";
+            }
+        }
+
+        return new ObservedWindow(
+            hWnd,
+            processId,
+            ownerHwnd,
+            isVisible,
+            observedClassName,
+            observedTitle,
+            bounds,
+            executablePath,
+            processName,
+            appUserModelId,
+            extendedStyle,
+            isCloaked,
+            rootOwnerHwnd,
+            taskSwitcherRepresentativeHwnd,
+            visibleBounds,
+            cloakState,
+            IsMinimized: isMinimized,
+            NormalBounds: normalBounds);
+    }
+
+    private static string QueryExecutablePath(uint processId)
+    {
+        IntPtr process = NativeMethodsShell.OpenProcess(
+            NativeMethodsShell.PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
+        if (process == IntPtr.Zero) return "";
+        try
+        {
+            var path = new StringBuilder(32768);
+            uint size = (uint)path.Capacity;
+            return NativeMethodsShell.QueryFullProcessImageName(process, 0, path, ref size)
+                ? path.ToString() : "";
+        }
+        finally { NativeMethodsShell.CloseHandle(process); }
+    }
+
+    private static IntPtr FindTaskSwitcherRepresentative(IntPtr rootOwnerHwnd)
+    {
+        IntPtr current = rootOwnerHwnd;
+        while (current != IntPtr.Zero)
+        {
+            IntPtr popup = NativeMethodsWindow.GetLastActivePopup(current);
+            if (popup == IntPtr.Zero || popup == current)
+                break;
+            if (NativeMethodsWindow.IsWindowVisible(popup))
+                return popup;
+            current = popup;
+        }
+
+        return current;
+    }
+}
+
+/// <summary>Pure, testable named policies for selecting raw observed windows.</summary>
+public static class WindowPolicyEvaluator
+{
+    internal static bool IsSystemSurface(ObservedWindow window) => ShellWindowClasses.Contains(window.ClassName);
+
+    internal const uint DwmCloakedByShell = 0x00000002;
+    private static readonly HashSet<string> ShellWindowClasses = new(StringComparer.Ordinal)
+    {
+        "Shell_TrayWnd", "DV2ControlHost", "MsgrIMEWindowClass",
+        "SysShadow", "Button", "Windows.UI.Core.CoreWindow",
+        "Progman", "WorkerW",
+        "NotifyIconOverflowWindow", "TrayClockWClass", "MSTaskListWClass",
+        "MSTaskSwWClass", "ReBarWindow32", "TopLevelWindowForOverflowXamlIsland",
+        "#32768", "tooltips_class32", "IME", "MSCTFIME UI"
+    };
+
+    public static bool Includes(
+        ObservedWindow window,
+        WindowCandidatePolicy policy,
+        uint ownProcessId = 0)
+    {
+        bool isOwnWindow = ownProcessId != 0 && window.ProcessId == ownProcessId;
+        bool isShellChrome = ShellWindowClasses.Contains(window.ClassName);
+        bool isPrimaryTaskWindow = IsPrimaryTaskWindow(window, isShellChrome);
+        bool isCaptureTask = isPrimaryTaskWindow ||
+            (window.TaskProxyOwnerHwnd != IntPtr.Zero &&
+             window.TaskProxyOwnerHwnd == window.RootOwnerHwnd &&
+             window.TaskSwitcherRepresentativeHwnd == window.Hwnd &&
+             IsPrimaryTaskWindow(window with { OwnerHwnd = IntPtr.Zero }, isShellChrome));
+        bool isInteractiveRisk = IsInteractiveRisk(window, isShellChrome);
+
+        return policy switch
+        {
+            WindowCandidatePolicy.CaptureCandidate =>
+                isCaptureTask && IsCaptureLayoutCandidate(window),
+
+            WindowCandidatePolicy.RestoreMatchCandidate =>
+                isCaptureTask && IsCaptureLayoutCandidate(window),
+
+            WindowCandidatePolicy.SwitchCloseCandidate =>
+                !isOwnWindow &&
+                isPrimaryTaskWindow &&
+                IsLayoutCandidate(window),
+
+            // Safe-switch preflight is deliberately conservative: owned dialogs, untitled
+            // transients, and small utility windows remain visible to risk detection. Product UI,
+            // shell chrome, cloaked windows, and non-activatable background surfaces are excluded.
+            WindowCandidatePolicy.SwitchRiskCandidate =>
+                !isOwnWindow &&
+                isInteractiveRisk,
+
+            WindowCandidatePolicy.MinimizeCandidate =>
+                !isOwnWindow &&
+                isPrimaryTaskWindow &&
+                IsLayoutCandidate(window),
+
+            _ => throw new ArgumentOutOfRangeException(nameof(policy), policy, null)
+        };
+    }
+
+    /// <summary>
+    /// Applies the ordinary task-window shape while allowing only a Shell-cloaked window. The
+    /// caller reads <c>IVirtualDesktopManager</c> separately and preserves unavailable membership
+    /// as unknown instead of claiming that the HWND is on the active desktop.
+    /// </summary>
+    public static bool IncludesInactiveVirtualDesktopCandidate(
+        ObservedWindow window,
+        WindowCandidatePolicy policy,
+        uint ownProcessId = 0)
+    {
+        if (policy is not (WindowCandidatePolicy.CaptureCandidate or
+            WindowCandidatePolicy.RestoreMatchCandidate) ||
+            !window.IsCloaked ||
+            window.CloakState != DwmCloakedByShell)
+        {
+            return false;
+        }
+
+        return Includes(window with { IsCloaked = false }, policy, ownProcessId);
+    }
+
+    /// <summary>
+    /// Selects independently manageable task windows using native ownership, taskbar styles,
+    /// activation behavior, and DWM visibility. Application and class names never participate.
+    /// </summary>
+    internal static bool IsPrimaryTaskWindow(ObservedWindow window, bool isShellChrome = false)
+    {
+        if (!window.IsVisible || window.IsCloaked || isShellChrome)
+            return false;
+
+        bool isAppWindow = HasExtendedStyle(window, NativeMethodsWindow.WS_EX_APPWINDOW);
+        if (HasExtendedStyle(window, NativeMethodsWindow.WS_EX_TOOLWINDOW))
+            return false;
+        if (HasExtendedStyle(window, NativeMethodsWindow.WS_EX_NOACTIVATE) && !isAppWindow)
+            return false;
+
+        // WS_EX_APPWINDOW explicitly opts a visible top-level window into taskbar behavior even
+        // when it has an owner. Otherwise, only independently owned root windows are restorable.
+        if (!isAppWindow && window.OwnerHwnd != IntPtr.Zero)
+            return false;
+
+        // The exact Alt+Tab representative algorithm is a Windows implementation detail. Keep
+        // its raw result available for diagnostics, but persist the independent root task so a
+        // temporary modal popup cannot make the owning application disappear from a snapshot.
+        return true;
+    }
+
+    /// <summary>
+    /// Broader risk policy: owned dialogs remain visible to safe-switch checks, while windows the
+    /// OS marks as cloaked, tool-only, or non-activatable are not treated as user work to close.
+    /// </summary>
+    private static bool IsInteractiveRisk(ObservedWindow window, bool isShellChrome)
+    {
+        if (!window.IsVisible || window.IsCloaked || isShellChrome)
+            return false;
+
+        bool isAppWindow = HasExtendedStyle(window, NativeMethodsWindow.WS_EX_APPWINDOW);
+        return !HasExtendedStyle(window, NativeMethodsWindow.WS_EX_TOOLWINDOW) &&
+               (!HasExtendedStyle(window, NativeMethodsWindow.WS_EX_NOACTIVATE) || isAppWindow);
+    }
+
+    private static bool IsCaptureLayoutCandidate(ObservedWindow window)
+    {
+        if (string.IsNullOrWhiteSpace(window.Title) &&
+            (window.ProcessId == 0 || (string.IsNullOrWhiteSpace(window.ProcessName) &&
+             string.IsNullOrWhiteSpace(window.ExecutablePath) && string.IsNullOrWhiteSpace(window.AppUserModelId))))
+            return false;
+        // 恢复边界为工作区坐标，此处只比较宽高，不将其当作屏幕位置。
+        WindowBounds? bounds = window.IsMinimized ? window.NormalBounds : window.Bounds;
+        return bounds is not { } size || (size.Width >= 100 && size.Height >= 100);
+    }
+
+    private static bool IsLayoutCandidate(ObservedWindow window)
+    {
+        if (string.IsNullOrWhiteSpace(window.Title))
+            return false;
+        if (window.Bounds is { } bounds && (bounds.Width < 100 || bounds.Height < 100))
+            return false;
+        return true;
+    }
+
+    private static bool HasExtendedStyle(ObservedWindow window, long style) =>
+        (window.ExtendedStyle & style) != 0;
+}

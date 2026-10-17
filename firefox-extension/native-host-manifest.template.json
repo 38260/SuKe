@@ -1,0 +1,9 @@
+{
+  "name": "com.suke.browser",
+  "description": "SuKe Firefox session native messaging host",
+  "path": "C:\\Program Files\\SuKe\\SuKe.exe",
+  "type": "stdio",
+  "allowed_extensions": [
+    "suke-browser-connector@suke.app"
+  ]
+}

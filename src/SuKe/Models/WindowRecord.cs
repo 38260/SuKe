@@ -1,0 +1,141 @@
+using System.Collections.Generic;
+using System.Text.Json.Serialization;
+namespace SuKe.Models;
+
+/// <summary>
+/// Immutable snapshot of a single top-level window captured by <see cref="SuKe.Services.WindowService"/>.
+/// Stored as the <see cref="WorkspaceEntry.Position"/> field inside a <see cref="WorkspaceSnapshot"/>.
+/// </summary>
+public class WindowRecord
+{
+    /// <summary>当前行能否保存；受限候选仍可显示，但不能假装已成功采集。</summary>
+    [JsonIgnore]
+    public bool CanCapture { get; set; } = true;
+
+    /// <summary>运行时采集限制说明，不写入恢复身份。</summary>
+    [JsonIgnore]
+    public string CaptureLimitation { get; set; } = "";
+
+    /// <summary>采集来源句柄，仅用于保存前复核，不写入工作区文件。</summary>
+    [JsonIgnore]
+    public IntPtr SourceWindowHandle { get; set; }
+
+    /// <summary>采集来源进程，用于防止句柄复用造成错误保存。</summary>
+    [JsonIgnore]
+    public uint SourceProcessId { get; set; }
+
+    // ── App identity ──────────────────────────────────────────────────────────────
+    /// <summary>Full path to the process executable, e.g. <c>C:\Program Files\...\app.exe</c>.</summary>
+    public string ExecutablePath { get; set; } = "";
+    /// <summary>Process name without extension, e.g. <c>"notepad"</c>.</summary>
+    public string ProcessName    { get; set; } = "";
+    /// <summary>Win32 window class name returned by <c>GetClassName</c>.</summary>
+    public string ClassName      { get; set; } = "";
+    /// <summary>First 120 characters of the window title, used for matching and display.</summary>
+    public string TitleSnippet   { get; set; } = "";
+
+    /// <summary>
+    /// Explicit <c>AppUserModelID</c> of this window, read via <c>SHGetPropertyStoreForWindow</c>.
+    /// <para>
+    /// Needed in two places: it is the only way to tell an installed web-app window (PWA such as
+    /// Insilico Terminal) apart from a normal browser window, and the only way to relaunch a
+    /// Store/MSIX app with its package identity intact. Classic desktop apps usually have no
+    /// explicit AUMID, so an empty string is the normal case there.
+    /// </para>
+    /// </summary>
+    public string AppUserModelId { get; set; } = "";
+
+    /// <summary>
+    /// Friendly name for UI display (e.g. "Insilico Terminal" instead of "brave"). Runtime-only,
+    /// filled in for the Save Workspace dialog; never persisted. Falls back to the process name.
+    /// </summary>
+    [JsonIgnore]
+    public string DisplayName { get; set; } = "";
+
+    /// <summary>
+    /// Address-bar URL of a browser window, captured only when it matches a configured
+    /// <see cref="AppSettings.DedicatedBrowserUrlPatterns"/> entry. Empty for every other window.
+    /// </summary>
+    public string BrowserUrl { get; set; } = "";
+
+    // ── Window state ──────────────────────────────────────────────────────────────
+    /// <summary>
+    /// <c>WINDOWPLACEMENT.showCmd</c> value (e.g. <c>SW_NORMAL = 1</c>, <c>SW_MAXIMIZE = 3</c>,
+    /// <c>SW_MINIMIZE = 6</c>). Used to restore maximised/minimised state after repositioning.
+    /// </summary>
+    public int  ShowCmd     { get; set; } = 1;
+    /// <summary>Left edge of the window's restored (non-maximised) rectangle, in virtual-screen coordinates.</summary>
+    public int  NormalLeft   { get; set; }
+    /// <summary>Top edge of the window's restored rectangle, in virtual-screen coordinates.</summary>
+    public int  NormalTop    { get; set; }
+    /// <summary>Right edge of the window's restored rectangle, in virtual-screen coordinates.</summary>
+    public int  NormalRight  { get; set; }
+    /// <summary>Bottom edge of the window's restored rectangle, in virtual-screen coordinates.</summary>
+    public int  NormalBottom { get; set; }
+    /// <summary>DPI of the monitor the window was on when captured. Used for DPI-aware coordinate scaling on restore.</summary>
+    public uint SavedDpi     { get; set; } = 96;
+
+    /// <summary>
+    /// Work-area-relative geometry and semantic anchors captured alongside the exact pixel
+    /// rectangle. Null identifies a legacy snapshot and activates the safe legacy fallback.
+    /// </summary>
+    public NormalizedWindowLayout? NormalizedLayout { get; set; }
+
+    /// <summary>
+    /// Runtime-only marker used by the restore executor when coordinates have already been
+    /// converted to the target monitor. Prevents the mutation boundary from scaling them again
+    /// using the window's pre-move monitor DPI.
+    /// </summary>
+    [JsonIgnore]
+    public bool CoordinatesAreFinal { get; set; }
+
+    /// <summary>
+    /// Runtime-only marker indicating that final coordinates describe the visible DWM frame.
+    /// The native mutation boundary converts them to WINDOWPLACEMENT outer bounds.
+    /// </summary>
+    [JsonIgnore]
+    public bool CoordinatesRepresentVisibleBounds { get; set; }
+
+    /// <summary>
+    /// For File Explorer windows: the folder open at snapshot time.
+    /// Populated via Shell.Application COM. Empty for non-Explorer windows.
+    /// </summary>
+    public string FolderPath { get; set; } = "";
+
+    /// <summary>
+    /// Runtime-only File Explorer tab locations associated with this top-level window. The
+    /// application adapter copies these into <see cref="WorkspaceEntry.ExplorerTabPaths"/> only
+    /// when file/folder capture is enabled.
+    /// </summary>
+    [JsonIgnore]
+    public List<string> ExplorerTabPaths { get; set; } = new();
+
+    /// <summary>Runtime-only index of the active item in <see cref="ExplorerTabPaths"/>.</summary>
+    [JsonIgnore]
+    public int ExplorerActiveTabIndex { get; set; }
+
+    /// <summary>Runtime-only Terminal tabs discovered through accessibility and configured at save.</summary>
+    [JsonIgnore]
+    public List<TerminalTab> TerminalTabs { get; set; } = new();
+
+    /// <summary>Runtime-only active Terminal tab index.</summary>
+    [JsonIgnore]
+    public int TerminalActiveTabIndex { get; set; }
+
+    // ── Monitor assignment (populated during snapshot, empty in old saves) ───
+    /// <summary>Stable EDID-based monitor ID, e.g. "A1B2:C3D4:0".</summary>
+    public string MonitorId   { get; set; } = "";
+
+    /// <summary>0-based monitor index matching <see cref="MonitorInfo.Index"/>.</summary>
+    public int    MonitorIndex { get; set; }
+
+    /// <summary>Human-readable monitor name for display purposes.</summary>
+    public string MonitorName  { get; set; } = "";
+
+    /// <summary>Optional saved Windows virtual-desktop GUID; empty means disabled or unavailable.</summary>
+    public string VirtualDesktopId { get; set; } = "";
+
+    /// <summary>Runtime-only membership in the active virtual desktop for Save-dialog grouping.</summary>
+    [JsonIgnore]
+    public bool? IsOnCurrentVirtualDesktop { get; set; }
+}

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuKe Browser Connector Privacy Policy</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 0 20px;
+        color: #1f2937;
+        line-height: 1.6;
+      }
+      h1, h2 {
+        color: #111827;
+      }
+      a {
+        color: #0f6fff;
+      }
+      ul {
+        padding-left: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Privacy Policy</h1>
+
+    <h2>Overview</h2>
+    <p>SuKe Browser Connector is a browser extension designed to save and restore the user’s browser tabs and tab groups as part of a SuKe workspace session.</p>
+    <p>This extension is intended to help users preserve their browser context when switching between desktop workspaces. It does not collect, sell, or share personal data with third parties.</p>
+
+    <h2>What data the extension uses</h2>
+    <p>The extension may read the user’s currently open tabs and tab group information so that the user can save and restore their browser state with their SuKe workspace.</p>
+    <p>This may include:</p>
+    <ul>
+      <li>tab titles</li>
+      <li>tab URLs</li>
+      <li>tab group information</li>
+      <li>browser-window bounds and session state needed to restore the current workflow</li>
+      <li>an opaque random connector-profile key used to keep tab reuse inside the capturing profile</li>
+    </ul>
+    <p>This data is used only to:</p>
+    <ul>
+      <li>save the current browser state</li>
+      <li>restore the browser state later</li>
+      <li>support the user’s local SuKe workflow</li>
+    </ul>
+
+    <h2>Where the data goes</h2>
+    <p>The extension communicates with the user’s local SuKe desktop application through native messaging.</p>
+    <p>The data is used locally on the user’s device and may be retained in the local SuKe workspace the user saves. It is not sent to a remote server by the connector for tracking, advertising, analytics, or any unrelated purpose. Data leaves the device only when the user explicitly exports it or configures a separate SuKe synchronization destination.</p>
+    <p>Mozilla classifies native-messaging transfer as transmission outside the add-on. The Firefox package therefore declares browsing activity, website content, and personally identifying information for URLs, titles/group labels, and the opaque profile key, even though the connector does not send that data off the user’s PC.</p>
+
+    <h2>No remote code</h2>
+    <p>This extension does not use remote code execution. It does not download or execute code from a remote source. It runs locally in the browser and communicates with the local SuKe application installed on the user’s device.</p>
+
+    <h2>No data collection for advertising or analytics</h2>
+    <p>This extension does not:</p>
+    <ul>
+      <li>request browser account identity, a profile name, or a device identifier</li>
+      <li>track browsing activity for advertising purposes</li>
+      <li>sell user data</li>
+      <li>share data with third parties</li>
+      <li>use analytics or advertisement networks</li>
+      <li>use location tracking, account data, or payment data</li>
+    </ul>
+    <p>Private/incognito windows are excluded. The connectors do not request cookies, passwords, general browsing history, page bodies, form data, downloads, bookmarks, or Firefox container identity.</p>
+
+    <h2>Data retention</h2>
+    <p>The extension stores browser session data only as needed for the user’s local SuKe workspace save and restore functionality. Data is not retained for marketing, profiling, or unrelated business purposes.</p>
+
+    <h2>Changes to this policy</h2>
+    <p>This privacy policy may be updated from time to time. Continued use of the extension after an update means the user accepts the revised policy.</p>
+
+    <h2>Contact</h2>
+    <p>For privacy questions or support, contact the maintainer through this project's repository.</p>
+  </body>
+</html>

@@ -1,0 +1,60 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>Resources\suke.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Release packaging -->
+    <AssemblyVersion>1.7.0.0</AssemblyVersion>
+    <FileVersion>1.7.0.0</FileVersion>
+    <Version>1.7.0</Version>
+    <Product>溯刻 · SuKe</Product>
+    <Company>SuKe</Company>
+    <Description>Workspace restoration tool — saves and restores open apps, files, and window positions across monitor changes and reboots.</Description>
+  </PropertyGroup>
+
+  <!-- Publish profile: self-contained single-file win-x64 -->
+  <PropertyGroup Condition="'$(PublishSingleFile)'=='true'">
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\suke.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.1.0" />
+    <PackageReference Include="OpenMcdf" Version="3.1.4" />
+    <PackageReference Include="WPF-UI" Version="3.0.5" />
+  </ItemGroup>
+
+  <!-- 每次常规构建后，把可运行文件放到仓库根目录，保持入口与最新构建同步。 -->
+  <Target Name="CopySuKeToRepositoryRoot"
+          AfterTargets="Build"
+          Condition="'$(TargetFramework)' == 'net8.0-windows' and '$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_SuKeRootFiles Include="$(TargetDir)$(AssemblyName).exe;$(TargetDir)$(AssemblyName).deps.json;$(TargetDir)$(AssemblyName).runtimeconfig.json;$(TargetDir)*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_SuKeRootFiles)"
+          DestinationFolder="$(MSBuildProjectDirectory)\..\.."
+          SkipUnchangedFiles="true"
+          Retries="0" />
+  </Target>
+
+  <!-- 根目录可能带有沙箱的低完整性继承标签；发布入口应以普通用户级别运行。 -->
+  <Target Name="EnsureRootExecutableIntegrity"
+          AfterTargets="CopySuKeToRepositoryRoot"
+          Condition="'$(OS)' == 'Windows_NT' and '$(TargetFramework)' == 'net8.0-windows' and '$(DesignTimeBuild)' != 'true'">
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -Command &quot;$ErrorActionPreference='Stop'; $waRootExe='$(MSBuildProjectDirectory)\..\..\$(AssemblyName).exe'; $waUser=[Security.Principal.WindowsIdentity]::GetCurrent().Name; $waOwner=[IO.File]::GetAccessControl($waRootExe).GetOwner([Security.Principal.NTAccount]).Value; if ($waOwner -eq $waUser) { &amp; icacls $waRootExe /grant ($waUser + ':(WO)'); if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }; &amp; icacls $waRootExe /setintegritylevel M; exit $LASTEXITCODE&quot;" />
+  </Target>
+
+</Project>

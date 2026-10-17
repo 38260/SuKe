@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "SuKe Browser Connector",
+  "version": "0.2.0",
+  "description": "Captures and restores browser tabs for SuKe workspaces.",
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage",
+    "nativeMessaging"
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "SuKe Browser Connector",
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuw0szhb5wPUcYVf4kTMiqSqaQhAYf7uW+gm1wkdougn5ov14T0qhnydwpMIzKhXZJtZt68rRYL8IfLQ72LFkAVOLa73ijwh/Gc2K7HrPVn+85ATZw0Iz7ZlO4BSS3sWu5NIWhJnYBSSN3MhVFioZMGDwyzGjxrWE822MpV1jCLIMPjtwBAr5F56e/4ic8p/S6yMW4odudFw009j6SEt4/0AV8DM7NwZ8fSBlSiKSM40FTGVhj4oaz43wd5MIkT/5RerJ+22jE2TPnvk/KNyFJJQipUOWgv2Kf2HEhTiMCEc2orWAmmC7+5dpuHSUE7KV7AhQx3+B4DpwAa97or2OYQIDAQAB"
+}
