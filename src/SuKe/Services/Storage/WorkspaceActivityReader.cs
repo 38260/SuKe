@@ -58,6 +58,7 @@ public sealed class WorkspaceActivityReader
                 WorkspaceId      = workspace.WorkspaceId,
                 WindowCount      = workspace.Entries.Count,
                 MonitorCount     = workspace.Monitors.Count,
+                Snapshot         = DescribeSnapshot(workspace),
             });
         }
 
@@ -87,6 +88,7 @@ public sealed class WorkspaceActivityReader
                 WindowCount     = checkpoint.Entries.Count,
                 MonitorCount    = checkpoint.Monitors.Count,
                 CheckpointId    = checkpointId.Length > 0 ? checkpointId : null,
+                Snapshot        = DescribeSnapshot(checkpoint),
             });
             if (checkpointId.Length > 0)
                 checkpointIndexById.TryAdd(checkpointId, entries.Count - 1);
@@ -123,6 +125,36 @@ public sealed class WorkspaceActivityReader
             .ThenBy(entry => entry.WorkspaceName, StringComparer.CurrentCultureIgnoreCase)
             .ToArray();
     }
+
+    private static WorkspaceActivitySnapshot DescribeSnapshot(WorkspaceSnapshot snapshot) => new()
+    {
+        SavedWithFiles = snapshot.SavedWithFiles,
+        BrowserTabCount = snapshot.BrowserSessions.Sum(session => session.Tabs.Count),
+        ExplorerTabCount = snapshot.Entries.Sum(entry => entry.ExplorerTabPaths.Count),
+        TerminalTabCount = snapshot.Entries.Sum(entry => entry.TerminalTabs.Count),
+        VirtualDesktopCount = snapshot.VirtualDesktops.Count,
+        UnassignedWindowCount = snapshot.Entries.Count(entry => string.IsNullOrEmpty(entry.MonitorId) ||
+            !snapshot.Monitors.Any(monitor => string.Equals(monitor.MonitorId, entry.MonitorId, StringComparison.OrdinalIgnoreCase))),
+        Applications = snapshot.Entries
+            .GroupBy(entry => ApplicationName(entry.ProcessName), StringComparer.OrdinalIgnoreCase)
+            .Select(group => new WorkspaceActivityApplication(group.Key, group.Count()))
+            .OrderByDescending(app => app.WindowCount)
+            .ThenBy(app => app.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray(),
+        Monitors = snapshot.Monitors.OrderBy(monitor => monitor.Index)
+            .Select(monitor => new WorkspaceActivityMonitor(
+                monitor.Index, monitor.FriendlyName, monitor.WidthPixels, monitor.HeightPixels,
+                monitor.Dpi, monitor.IsPrimary,
+                snapshot.Entries.Count(entry => !string.IsNullOrEmpty(monitor.MonitorId) &&
+                    string.Equals(entry.MonitorId, monitor.MonitorId, StringComparison.OrdinalIgnoreCase))))
+            .ToArray(),
+    };
+
+    private static string ApplicationName(string processName) =>
+        !string.IsNullOrWhiteSpace(processName) && processName.All(character =>
+            char.IsLetterOrDigit(character) || character is ' ' or '.' or '_' or '-')
+            ? processName
+            : "Application";
 
     /// <summary>Maps a checkpoint trigger onto the activity filters.</summary>
     public static WorkspaceActivityCategory Classify(WorkspaceCheckpointTrigger trigger) => trigger switch

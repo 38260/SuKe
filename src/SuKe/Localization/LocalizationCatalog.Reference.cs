@@ -44,5 +44,26 @@ internal static partial class LocalizationCatalog
         Add(entries, "Hide screen previews", "隐藏屏幕截图");
         Add(entries, "Show screen previews", "显示屏幕截图");
         Add(entries, "Screen {0}", "显示器 {0}");
+        Add(entries, "Workspace: {0}", "工作区：{0}");
+        Add(entries, "Operation: {0}", "操作类型：{0}");
+        Add(entries, "Not recorded", "未记录");
+        Add(entries, "Workspace saved", "保存工作区");
+        Add(entries, "Saved content", "保存的内容");
+        Add(entries, "Desktop captured before this operation", "操作前的桌面快照");
+        Add(entries, "The original snapshot is no longer available. Only recorded execution results are shown.", "原始快照已不可用，仅展示已记录的执行结果。");
+        Add(entries, "Browser tabs: {0} · Explorer tabs: {1} · Terminal tabs: {2}", "浏览器标签页：{0} · 资源管理器标签页：{1} · 终端标签页：{2}");
+        Add(entries, "Virtual desktops: {0} · File/folder capture: {1}", "虚拟桌面：{0} · 文件/文件夹采集：{1}");
+        Add(entries, "Applications in snapshot", "快照中的应用");
+        Add(entries, "{0}: {1} window(s)", "{0}：{1} 个窗口");
+        Add(entries, "No windows in this snapshot.", "此快照中没有窗口。");
+        Add(entries, "Monitor configuration", "显示器配置");
+        Add(entries, "Monitor configuration was not recorded.", "未记录显示器配置。");
+        Add(entries, "Monitor {0}: {1} · {2} × {3} · {4}% · {5} window(s){6}", "显示器 {0}：{1} · {2} × {3} · {4}% · {5} 个窗口{6}");
+        Add(entries, " · Primary", " · 主显示器");
+        Add(entries, "Record identifiers", "记录标识");
+        Add(entries, "Unassigned monitor: {0} window(s)", "显示器未识别：{0} 个窗口");
+        Add(entries, "Workspace ID: {0}", "工作区标识：{0}");
+        Add(entries, "Checkpoint ID: {0}", "检查点标识：{0}");
+        Add(entries, "Operation ID: {0}", "操作标识：{0}");
     }
 }

@@ -35,6 +35,11 @@ public partial class ActivityPage
         };
         Loc.SetSkip(title, true);
         content.Children.Add(title);
+        content.Children.Add(Line(Loc.Format("Workspace: {0}",
+            row.Entry.WorkspaceName ?? Loc.T("Not recorded")), 13, top: 8));
+        content.Children.Add(Line(Loc.Format("Operation: {0}", row.Entry.Trigger is { } trigger
+            ? RestoreOutcomeText.OperationLabel(trigger)
+            : Loc.T("Workspace saved")), 13, secondary: true, top: 3));
 
         // 时间范围与耗时：只在真正记录了结果时展示，旧记录不显示 0 秒这种假数据。
         if (row.Entry.Outcome is RestoreOutcomeRecord timed)
@@ -91,7 +96,7 @@ public partial class ActivityPage
                     issues.Children.Add(Line(
                         "•  " + DescribeIssueHeadline(issue), 13, top: 6));
                     if (issue.Description.Length > 0)
-                        issues.Children.Add(Line(issue.Description, 12, secondary: true, top: 1, left: 14));
+                        issues.Children.Add(Line(Loc.T(issue.Description), 12, secondary: true, top: 1, left: 14));
                 }
 
                 content.Children.Add(new Expander
@@ -135,24 +140,38 @@ public partial class ActivityPage
                 12, secondary: true, top: 4));
         }
 
+        AddSnapshotDetails(content, row.Entry);
         content.Children.Add(Line(DescribeEvidence(row.Entry), 12, secondary: true, top: 16));
+        var identifiers = new StackPanel();
+        if (row.Entry.WorkspaceId is { Length: > 0 } workspaceId)
+            identifiers.Children.Add(Line(Loc.Format("Workspace ID: {0}", workspaceId), 12, top: 4));
+        if (row.Entry.CheckpointId is { Length: > 0 } checkpointId)
+            identifiers.Children.Add(Line(Loc.Format("Checkpoint ID: {0}", checkpointId), 12, top: 4));
+        if (row.Entry.Outcome is { } recorded)
+            identifiers.Children.Add(Line(Loc.Format("Operation ID: {0}", recorded.OperationId), 12, top: 4));
+        if (identifiers.Children.Count > 0)
+            content.Children.Add(new Expander
+            {
+                Header = Loc.T("Record identifiers"), Content = identifiers, Margin = new Thickness(0, 12, 0, 0),
+            });
 
         var close = new Wpf.Ui.Controls.Button
         {
             Content = Loc.T("Close"), IsCancel = true, HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 16, 0, 0),
+            Margin = new Thickness(24, 8, 24, 20),
         };
-        content.Children.Add(close);
 
         var layout = new DockPanel();
         var titleBar = new TitleBar { Title = Loc.T("Activity details"), ShowMinimize = false, ShowMaximize = false };
         DockPanel.SetDock(titleBar, Dock.Top);
         layout.Children.Add(titleBar);
+        DockPanel.SetDock(close, Dock.Bottom);
+        layout.Children.Add(close);
         layout.Children.Add(new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         var dialog = new FluentWindow
         {
             Title = Loc.T("Activity details"), Owner = owner, Content = layout,
-            Width = 560, Height = 560, MinWidth = 400, MinHeight = 320,
+            Width = 660, Height = 660, MinWidth = 440, MinHeight = 360,
             ExtendsContentIntoTitleBar = true, WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
         // 调色板由 ThemeService 在应用级维护，此对话框无需自带主题字典。
@@ -160,6 +179,38 @@ public partial class ActivityPage
         dialog.SetResourceReference(Control.BackgroundProperty, "ApplicationBackgroundBrush");
         close.Click += (_, _) => dialog.Close();
         return dialog;
+    }
+
+    private static void AddSnapshotDetails(StackPanel content, WorkspaceActivityEntry entry)
+    {
+        content.Children.Add(Line(Loc.T(entry.Kind == WorkspaceActivityKind.WorkspaceSaved
+            ? "Saved content" : "Desktop captured before this operation"), 15, top: 16));
+        if (entry.Snapshot is not { } snapshot)
+        {
+            content.Children.Add(Line(Loc.T("The original snapshot is no longer available. Only recorded execution results are shown."),
+                12, secondary: true, top: 4));
+            return;
+        }
+        content.Children.Add(Line(Loc.Format("{0} window(s) across {1} monitor(s)", entry.WindowCount, entry.MonitorCount), 13, top: 6));
+        content.Children.Add(Line(Loc.Format("Browser tabs: {0} · Explorer tabs: {1} · Terminal tabs: {2}",
+            snapshot.BrowserTabCount, snapshot.ExplorerTabCount, snapshot.TerminalTabCount), 13, top: 4));
+        content.Children.Add(Line(Loc.Format("Virtual desktops: {0} · File/folder capture: {1}", snapshot.VirtualDesktopCount,
+            Loc.T(snapshot.SavedWithFiles ? "Enabled" : "Disabled")), 13, top: 4));
+        content.Children.Add(Line(Loc.T("Applications in snapshot"), 14, top: 12));
+        foreach (WorkspaceActivityApplication app in snapshot.Applications)
+            content.Children.Add(Line(Loc.Format("{0}: {1} window(s)", app.Name == "Application" ? Loc.T(app.Name) : app.Name, app.WindowCount), 13, top: 3));
+        if (snapshot.Applications.Count == 0)
+            content.Children.Add(Line(Loc.T("No windows in this snapshot."), 12, secondary: true, top: 3));
+        content.Children.Add(Line(Loc.T("Monitor configuration"), 14, top: 12));
+        foreach (WorkspaceActivityMonitor monitor in snapshot.Monitors)
+            content.Children.Add(Line(Loc.Format("Monitor {0}: {1} · {2} × {3} · {4}% · {5} window(s){6}",
+                monitor.Index + 1, monitor.Name, monitor.Width, monitor.Height,
+                Math.Round(monitor.Dpi / 96.0 * 100), monitor.WindowCount,
+                monitor.IsPrimary ? Loc.T(" · Primary") : ""), 13, top: 4));
+        if (snapshot.Monitors.Count == 0)
+            content.Children.Add(Line(Loc.T("Monitor configuration was not recorded."), 12, secondary: true, top: 3));
+        if (snapshot.UnassignedWindowCount > 0)
+            content.Children.Add(Line(Loc.Format("Unassigned monitor: {0} window(s)", snapshot.UnassignedWindowCount), 12, secondary: true, top: 4));
     }
 
     /// <summary>一条明细行；长文本换行，不使用巨大标题堆叠数字。</summary>

@@ -7,6 +7,53 @@ namespace SuKe.Tests;
 public class WorkspaceActivityReaderTests
 {
     [Fact]
+    public void Snapshot_details_count_content_without_carrying_private_targets()
+    {
+        using var directory = new TestDirectory();
+        var storage = new StorageService(directory.Path);
+        var workspace = new WorkspaceSnapshot
+        {
+            Name = "Design", SavedWithFiles = false,
+            Monitors = [new MonitorInfo { MonitorId = "screen", FriendlyName = "Display", WidthPixels = 2560, HeightPixels = 1440, Dpi = 144, IsPrimary = true }],
+            VirtualDesktops = [new SavedVirtualDesktop { DesktopId = Guid.NewGuid().ToString("D"), Name = "Private desktop" }],
+            Entries = [
+                new WorkspaceEntry { ProcessName = "editor", MonitorId = "screen", FilePath = @"D:\private\secret.txt", ExplorerTabPaths = [@"D:\private"] },
+                new WorkspaceEntry { ProcessName = "EDITOR", MonitorId = "screen", TerminalTabs = [new TerminalTab { StartingDirectory = @"D:\private" }] },
+                new WorkspaceEntry { ProcessName = @"D:\private\app.exe" }],
+            BrowserSessions = [new BrowserSession { Tabs = [new BrowserTab { Url = "https://private.invalid", Title = "Private title" }] }],
+        };
+        storage.SaveWorkspace(workspace);
+        WorkspaceActivitySnapshot snapshot = Assert.Single(new WorkspaceActivityReader(storage).Read()).Snapshot!;
+        Assert.False(snapshot.SavedWithFiles);
+        Assert.Equal(1, snapshot.BrowserTabCount);
+        Assert.Equal(1, snapshot.ExplorerTabCount);
+        Assert.Equal(1, snapshot.TerminalTabCount);
+        Assert.Equal(1, snapshot.VirtualDesktopCount);
+        Assert.Equal(2, snapshot.Applications.Count);
+        Assert.Equal(2, snapshot.Applications[0].WindowCount);
+        Assert.Equal(144u, Assert.Single(snapshot.Monitors).Dpi);
+        Assert.Equal(2, snapshot.Monitors[0].WindowCount);
+        Assert.Equal(1, snapshot.UnassignedWindowCount);
+        string json = System.Text.Json.JsonSerializer.Serialize(snapshot);
+        Assert.DoesNotContain("private", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Checkpoint_details_describe_the_captured_desktop_instead_of_the_target_workspace()
+    {
+        using var directory = new TestDirectory();
+        var storage = new StorageService(directory.Path);
+        var target = new WorkspaceSnapshot { Name = "Target", Entries = [new WorkspaceEntry { ProcessName = "target" }] };
+        storage.SaveWorkspace(target);
+        storage.Checkpoints.Save(new WorkspaceSnapshot { Entries = [new WorkspaceEntry { ProcessName = "before" }] },
+            WorkspaceCheckpointTrigger.Restore, target.WorkspaceId);
+        WorkspaceActivityEntry checkpoint = Assert.Single(new WorkspaceActivityReader(storage).Read(), entry => entry.Kind == WorkspaceActivityKind.Checkpoint);
+        Assert.Equal("before", Assert.Single(checkpoint.Snapshot!.Applications).Name);
+        Assert.Null(checkpoint.Outcome);
+    }
+
+    [Fact]
     public void Empty_storage_produces_no_activity()
     {
         using var directory = new TestDirectory();
