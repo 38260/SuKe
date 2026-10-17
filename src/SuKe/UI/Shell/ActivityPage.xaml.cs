@@ -16,9 +16,10 @@ namespace SuKe.UI.Shell;
 /// Activity page: a date-grouped timeline of the workspace events the application already persists.
 /// </summary>
 /// <remarks>
-/// Every row is projected from a saved workspace document or a retained recovery checkpoint, so the
-/// feed can only state that an operation <em>started</em>. Restore outcomes are not persisted and are
-/// therefore never displayed as a status badge.
+/// Every row is projected from durable artifacts: named workspaces, retained recovery checkpoints,
+/// recorded restore outcomes, and workspace deletion records. The first two can only state that
+/// something was <em>saved</em> or that an operation <em>started</em>; only the outcome records can
+/// state success or failure, and entries without one are shown as “result unknown”.
 /// </remarks>
 public partial class ActivityPage : UserControl
 {
@@ -46,10 +47,17 @@ public partial class ActivityPage : UserControl
             Loc.Apply(this);
             RestoreOutcomeStore.OutcomeRecorded -= OnOutcomeRecorded;
             RestoreOutcomeStore.OutcomeRecorded += OnOutcomeRecorded;
+            WorkspaceDeletionStore.DeletionRecorded -= OnOutcomeRecorded;
+            WorkspaceDeletionStore.DeletionRecorded += OnOutcomeRecorded;
         };
-        Unloaded += (_, _) => RestoreOutcomeStore.OutcomeRecorded -= OnOutcomeRecorded;
+        Unloaded += (_, _) =>
+        {
+            RestoreOutcomeStore.OutcomeRecorded -= OnOutcomeRecorded;
+            WorkspaceDeletionStore.DeletionRecorded -= OnOutcomeRecorded;
+        };
     }
 
+    /// <summary>一次恢复结束或一次删除落盘后，若本页仍打开则就地刷新。</summary>
     private void OnOutcomeRecorded() =>
         Dispatcher.BeginInvoke(() =>
         {
@@ -72,7 +80,8 @@ public partial class ActivityPage : UserControl
         _applyingFilter = true;
         try
         {
-            foreach (ToggleButton candidate in new[] { FilterAll, FilterRestore, FilterSaved, FilterSystem })
+            foreach (ToggleButton candidate in new[]
+                     { FilterAll, FilterRestore, FilterSaved, FilterSystem, FilterDeleted })
                 candidate.IsChecked = ReferenceEquals(candidate, chip);
         }
         finally
@@ -88,6 +97,7 @@ public partial class ActivityPage : UserControl
         if (ReferenceEquals(_activeChip, FilterRestore)) return entry.Category == WorkspaceActivityCategory.Restore;
         if (ReferenceEquals(_activeChip, FilterSaved))   return entry.Category == WorkspaceActivityCategory.Saved;
         if (ReferenceEquals(_activeChip, FilterSystem))  return entry.Category == WorkspaceActivityCategory.System;
+        if (ReferenceEquals(_activeChip, FilterDeleted)) return entry.Category == WorkspaceActivityCategory.Deleted;
         return true;
     }
 
@@ -143,11 +153,14 @@ public partial class ActivityPage : UserControl
         return new ActivityRowItem
         {
             Entry = entry,
-            Icon = entry.Kind == WorkspaceActivityKind.WorkspaceSaved
-                ? SymbolRegular.Save24
-                : entry.Category == WorkspaceActivityCategory.Restore
+            Icon = entry.Kind switch
+            {
+                WorkspaceActivityKind.WorkspaceSaved => SymbolRegular.Save24,
+                WorkspaceActivityKind.WorkspaceDeleted => SymbolRegular.Delete24,
+                _ => entry.Category == WorkspaceActivityCategory.Restore
                     ? SymbolRegular.Play24
                     : SymbolRegular.Settings24,
+            },
             Category = entry.Category,
             Title = DescribeTitle(entry),
             Meta = DescribeMeta(entry, when),
@@ -157,6 +170,7 @@ public partial class ActivityPage : UserControl
             {
                 WorkspaceActivityCategory.Restore => Loc.T("Restore"),
                 WorkspaceActivityCategory.Saved => Loc.T("Saved"),
+                WorkspaceActivityCategory.Deleted => Loc.T("Deleted"),
                 _ => Loc.T("System"),
             },
             ConnectorAboveVisibility = isFirst ? Visibility.Collapsed : Visibility.Visible,
@@ -195,6 +209,12 @@ public partial class ActivityPage : UserControl
                 ? Loc.T("Workspace saved")
                 : Loc.Format("Workspace saved: {0}", name);
 
+        // 删除记录没有触发器；它陈述的是「这个工作区被删掉了」这一件事。
+        if (entry.Kind == WorkspaceActivityKind.WorkspaceDeleted)
+            return name is null
+                ? Loc.T("Workspace deleted")
+                : Loc.Format("Workspace deleted: {0}", name);
+
         return entry.Trigger switch
         {
             WorkspaceCheckpointTrigger.Restore => name is null
@@ -220,7 +240,8 @@ public partial class ActivityPage : UserControl
         if (entry.Outcome is not null)
             return $"{when}  ·  {RestoreOutcomeText.PlannedDetail(entry.Outcome)}";
 
-        string detail = entry.Kind == WorkspaceActivityKind.WorkspaceSaved
+        // 保存与删除都描述「这份快照里有多少东西」；检查点才说它是恢复点。
+        string detail = entry.Kind is WorkspaceActivityKind.WorkspaceSaved or WorkspaceActivityKind.WorkspaceDeleted
             ? Loc.Format(
                 "{0} window(s) across {1} monitor(s)",
                 entry.WindowCount,

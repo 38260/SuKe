@@ -74,6 +74,7 @@
             <ToggleButton x:Name="FilterRestore" Style="{StaticResource WaFilterChip}" Tag="{x:Static ui:SymbolRegular.ArrowCounterclockwise24}" Content="{shell:LocalizedText 'Restores'}" Checked="OnFilterChecked" Unchecked="OnFilterUnchecked" ToolTip="{shell:LocalizedText 'Operations that started a restore, switch, or undo'}"/>
             <ToggleButton x:Name="FilterSaved" Style="{StaticResource WaFilterChip}" Tag="{x:Static ui:SymbolRegular.Save24}" Content="{shell:LocalizedText 'Saves'}" Checked="OnFilterChecked" Unchecked="OnFilterUnchecked" ToolTip="{shell:LocalizedText 'Workspaces that were saved'}"/>
             <ToggleButton x:Name="FilterSystem" Style="{StaticResource WaFilterChip}" Tag="{x:Static ui:SymbolRegular.Settings24}" Content="{shell:LocalizedText 'System'}" Checked="OnFilterChecked" Unchecked="OnFilterUnchecked" ToolTip="{shell:LocalizedText 'Display-driven and manual checkpoints'}"/>
+            <ToggleButton x:Name="FilterDeleted" Style="{StaticResource WaFilterChip}" Tag="{x:Static ui:SymbolRegular.Delete24}" Content="{shell:LocalizedText 'Deletions'}" Checked="OnFilterChecked" Unchecked="OnFilterUnchecked" ToolTip="{shell:LocalizedText 'Workspaces that were deleted'}"/>
         </WrapPanel>
 
         <!-- ── Timeline ─────────────────────────────────────────────────────── -->

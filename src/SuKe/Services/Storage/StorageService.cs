@@ -55,6 +55,7 @@ public class StorageService
             AtomicWriter);
         Previews = new WorkspacePreviewStore(_baseDir);
         RestoreOutcomes = new RestoreOutcomeStore(_baseDir, AtomicWriter);
+        Deletions = new WorkspaceDeletionStore(_baseDir, AtomicWriter);
 
         ImportLegacyProfiles();
     }
@@ -73,6 +74,9 @@ public class StorageService
 
     /// <summary>一次恢复操作的真实结果记录，用于活动页展示成功/失败统计。</summary>
     internal RestoreOutcomeStore RestoreOutcomes { get; }
+
+    /// <summary>工作区删除记录；工作区文档删除后，活动流只剩这一条能证明它存在过。</summary>
+    internal WorkspaceDeletionStore Deletions { get; }
 
     /// <summary>Issues reported by the most recent named-workspace load.</summary>
     public IReadOnlyList<StorageLoadIssue> LastLoadIssues => _lastLoadIssues;
@@ -222,9 +226,13 @@ public class StorageService
 
     public void DeleteWorkspace(WorkspaceSnapshot snapshot)
     {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
         // 先删截图：若清理失败，保留工作区供用户重试删除。
         Previews.Delete(snapshot.WorkspaceId);
         NamedWorkspaces.Delete(snapshot);
+        // 删除记录只在真的删掉之后写，避免清理失败时留下一条与事实不符的“已删除”。
+        Deletions.Record(snapshot, DateTime.UtcNow);
     }
 
     private sealed class LegacyMonitorProfile

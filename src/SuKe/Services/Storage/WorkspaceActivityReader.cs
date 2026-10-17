@@ -10,13 +10,14 @@ namespace SuKe.Services;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Three durable sources feed this feed. Named workspace captures under <c>workspaces/</c> and
+/// Four durable sources feed this feed. Named workspace captures under <c>workspaces/</c> and
 /// recovery checkpoints under <c>checkpoints/</c> describe what was <em>saved</em> or what an
 /// operation was about to change: a checkpoint is written as the durability boundary before any
 /// mutation, so on its own it only proves that an operation started. The recorded execution result
 /// under <c>restore-results/</c> is the third source, and it is the only one that can state success
 /// or failure — it is written from the real <c>RestoreExecutionResult</c>, never from the size of
-/// the saved content.
+/// the saved content. The fourth source is <c>deletions/</c>: once a workspace document is gone it can
+/// no longer be projected, so the deletion record is the last surviving trace of it.
 /// </para>
 /// <para>
 /// A result is attached to its checkpoint by the stable checkpoint identifier, so two consecutive
@@ -58,7 +59,7 @@ public sealed class WorkspaceActivityReader
                 WorkspaceId      = workspace.WorkspaceId,
                 WindowCount      = workspace.Entries.Count,
                 MonitorCount     = workspace.Monitors.Count,
-                Snapshot         = DescribeSnapshot(workspace),
+                Snapshot         = WorkspaceActivitySnapshotBuilder.Describe(workspace),
             });
         }
 
@@ -88,7 +89,7 @@ public sealed class WorkspaceActivityReader
                 WindowCount     = checkpoint.Entries.Count,
                 MonitorCount    = checkpoint.Monitors.Count,
                 CheckpointId    = checkpointId.Length > 0 ? checkpointId : null,
-                Snapshot        = DescribeSnapshot(checkpoint),
+                Snapshot        = WorkspaceActivitySnapshotBuilder.Describe(checkpoint),
             });
             if (checkpointId.Length > 0)
                 checkpointIndexById.TryAdd(checkpointId, entries.Count - 1);
@@ -120,41 +121,32 @@ public sealed class WorkspaceActivityReader
             });
         }
 
+        // 删除记录是第四个来源：工作区文档已经不在磁盘上，只剩这条记录能说明它存在过。
+        foreach (WorkspaceDeletionRecord deletion in _storage.Deletions.Read())
+        {
+            entries.Add(new WorkspaceActivityEntry
+            {
+                Kind             = WorkspaceActivityKind.WorkspaceDeleted,
+                Category         = WorkspaceActivityCategory.Deleted,
+                OccurredAtLocal  = deletion.DeletedAtUtc.ToLocalTime(),
+                WorkspaceName    = string.IsNullOrWhiteSpace(deletion.WorkspaceName)
+                    ? null
+                    : deletion.WorkspaceName,
+                WorkspaceId      = string.IsNullOrWhiteSpace(deletion.WorkspaceId)
+                    ? null
+                    : deletion.WorkspaceId,
+                WindowCount      = deletion.WindowCount,
+                MonitorCount     = deletion.MonitorCount,
+                SavedAtLocal     = deletion.SavedAtUtc?.ToLocalTime(),
+                Snapshot         = deletion.Snapshot,
+            });
+        }
+
         return entries
             .OrderByDescending(entry => entry.OccurredAtLocal)
             .ThenBy(entry => entry.WorkspaceName, StringComparer.CurrentCultureIgnoreCase)
             .ToArray();
     }
-
-    private static WorkspaceActivitySnapshot DescribeSnapshot(WorkspaceSnapshot snapshot) => new()
-    {
-        SavedWithFiles = snapshot.SavedWithFiles,
-        BrowserTabCount = snapshot.BrowserSessions.Sum(session => session.Tabs.Count),
-        ExplorerTabCount = snapshot.Entries.Sum(entry => entry.ExplorerTabPaths.Count),
-        TerminalTabCount = snapshot.Entries.Sum(entry => entry.TerminalTabs.Count),
-        VirtualDesktopCount = snapshot.VirtualDesktops.Count,
-        UnassignedWindowCount = snapshot.Entries.Count(entry => string.IsNullOrEmpty(entry.MonitorId) ||
-            !snapshot.Monitors.Any(monitor => string.Equals(monitor.MonitorId, entry.MonitorId, StringComparison.OrdinalIgnoreCase))),
-        Applications = snapshot.Entries
-            .GroupBy(entry => ApplicationName(entry.ProcessName), StringComparer.OrdinalIgnoreCase)
-            .Select(group => new WorkspaceActivityApplication(group.Key, group.Count()))
-            .OrderByDescending(app => app.WindowCount)
-            .ThenBy(app => app.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray(),
-        Monitors = snapshot.Monitors.OrderBy(monitor => monitor.Index)
-            .Select(monitor => new WorkspaceActivityMonitor(
-                monitor.Index, monitor.FriendlyName, monitor.WidthPixels, monitor.HeightPixels,
-                monitor.Dpi, monitor.IsPrimary,
-                snapshot.Entries.Count(entry => !string.IsNullOrEmpty(monitor.MonitorId) &&
-                    string.Equals(entry.MonitorId, monitor.MonitorId, StringComparison.OrdinalIgnoreCase))))
-            .ToArray(),
-    };
-
-    private static string ApplicationName(string processName) =>
-        !string.IsNullOrWhiteSpace(processName) && processName.All(character =>
-            char.IsLetterOrDigit(character) || character is ' ' or '.' or '_' or '-')
-            ? processName
-            : "Application";
 
     /// <summary>Maps a checkpoint trigger onto the activity filters.</summary>
     public static WorkspaceActivityCategory Classify(WorkspaceCheckpointTrigger trigger) => trigger switch

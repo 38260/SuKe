@@ -1461,10 +1461,14 @@ internal static partial class LocalizationCatalog
         Add(entries, "Restores", "恢复记录");
         Add(entries, "Saves", "保存记录");
         Add(entries, "System", "系统");
+        Add(entries, "Deletions", "删除记录");
+        Add(entries, "Deleted", "已删除");
         Add(entries, "Today", "今天");
         Add(entries, "Yesterday", "昨天");
         Add(entries, "Workspace saved", "工作区已保存");
         Add(entries, "Workspace saved: {0}", "工作区已保存：{0}");
+        Add(entries, "Workspace deleted", "工作区已删除");
+        Add(entries, "Workspace deleted: {0}", "工作区已删除：{0}");
         Add(entries, "Restore started", "恢复已启动");
         Add(entries, "Restore started: {0}", "恢复已启动：{0}");
         Add(entries, "Selected-monitor restore started", "选定显示器恢复已启动");
@@ -1486,12 +1490,21 @@ internal static partial class LocalizationCatalog
         Add(entries, "Show every durable event", "显示全部可读取的活动");
         Add(entries, "Operations that started a restore, switch, or undo", "已启动恢复、切换或撤销的记录");
         Add(entries, "Workspaces that were saved", "已保存工作区的记录");
+        Add(entries, "Workspaces that were deleted", "已删除工作区的记录");
         Add(entries, "Display-driven and manual checkpoints", "显示器恢复及手动检查点记录");
         Add(entries, "Details", "详情");
         Add(entries, "Activity details", "活动详情");
         Add(entries, "Settings content", "设置内容");
         Add(entries, "Source: the current saved workspace. This is its latest save time, not a complete save history.", "来源：当前已保存的工作区。此处为最近保存时间，不是完整的保存历史。");
         Add(entries, "Source: a retained recovery checkpoint. It records the desktop before an operation; it does not prove that the restore completed. Older checkpoints may expire.", "来源：保留的恢复检查点。记录的是操作前的桌面状态，不能证明恢复已完成；较早的检查点可能过期。");
+
+        // 工作区删除记录：活动流里唯一还能证明「这个工作区存在过」的一行。
+        // 值不得与词典中任何其它条目的中文重复，否则反向映射会产生歧义。
+        Add(entries, "This workspace was deleted. The summary below is its last saved content.", "此工作区已删除，下面列出的是它最后一次保存的内容。");
+        Add(entries, "Last saved {0}", "最后保存于 {0}");
+        Add(entries, "Deleted workspaces cannot be restored from this record; it is kept only as history.", "已删除的工作区无法通过这条记录恢复，保留它只作历史。");
+        Add(entries, "Content of the deleted workspace", "被删工作区的内容");
+        Add(entries, "Source: the deletion record written when the workspace was removed. It carries the last saved summary only, and contains no restore result.", "来源：删除工作区时写入的删除记录。它只携带最后一次保存的摘要，不含任何恢复结果。");
         Add(entries, "Save Workspace", "保存当前工作区");
 
         // 恢复结果记录：活动列表的摘要行、详情窗口的统计与原因。

@@ -14,6 +14,9 @@ public enum WorkspaceActivityKind
 
     /// <summary>A restore operation recorded its real execution result.</summary>
     RestoreOutcome,
+
+    /// <summary>A named workspace was deleted; the deletion itself is the only surviving record.</summary>
+    WorkspaceDeleted,
 }
 
 /// <summary>Filter grouping used by the activity page.</summary>
@@ -27,6 +30,9 @@ public enum WorkspaceActivityCategory
 
     /// <summary>A display-driven or manual capture started.</summary>
     System,
+
+    /// <summary>A named workspace was deleted.</summary>
+    Deleted,
 }
 
 /// <summary>
@@ -45,6 +51,9 @@ public sealed record WorkspaceActivityEntry
 
     /// <summary>When the artifact was written, already converted to local time for display.</summary>
     public required DateTime OccurredAtLocal { get; init; }
+
+    /// <summary>删除记录专用：被删工作区最后一次保存的时刻；不可知时为 null。</summary>
+    public DateTime? SavedAtLocal { get; init; }
 
     /// <summary>The operation that caused a checkpoint; null for a saved workspace.</summary>
     public WorkspaceCheckpointTrigger? Trigger { get; init; }

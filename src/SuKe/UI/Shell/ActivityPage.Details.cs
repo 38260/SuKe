@@ -39,7 +39,9 @@ public partial class ActivityPage
             row.Entry.WorkspaceName ?? Loc.T("Not recorded")), 13, top: 8));
         content.Children.Add(Line(Loc.Format("Operation: {0}", row.Entry.Trigger is { } trigger
             ? RestoreOutcomeText.OperationLabel(trigger)
-            : Loc.T("Workspace saved")), 13, secondary: true, top: 3));
+            : row.Entry.Kind == WorkspaceActivityKind.WorkspaceDeleted
+                ? Loc.T("Workspace deleted")
+                : Loc.T("Workspace saved")), 13, secondary: true, top: 3));
 
         // 时间范围与耗时：只在真正记录了结果时展示，旧记录不显示 0 秒这种假数据。
         if (row.Entry.Outcome is RestoreOutcomeRecord timed)
@@ -126,6 +128,21 @@ public partial class ActivityPage
                 Loc.T("Older records did not store a restore result, so no success or failure can be shown."),
                 12, secondary: true, top: 4));
         }
+        else if (row.Entry.Kind == WorkspaceActivityKind.WorkspaceDeleted)
+        {
+            // 删除记录没有“恢复结果”可言；它只说明这个工作区曾经存在、当时存了什么。
+            content.Children.Add(Line(Loc.T("This workspace was deleted. The summary below is its last saved content."),
+                14, top: 10));
+            if (row.Entry.SavedAtLocal is { } savedAt)
+            {
+                content.Children.Add(Line(
+                    Loc.Format("Last saved {0}", savedAt.ToString("yyyy-MM-dd HH:mm:ss")),
+                    12, secondary: true, top: 4));
+            }
+            content.Children.Add(Line(
+                Loc.T("Deleted workspaces cannot be restored from this record; it is kept only as history."),
+                12, secondary: true, top: 4));
+        }
         else
         {
             // 保存事件本身没有“恢复结果”，这里只陈述这个工作区保存了什么。
@@ -183,8 +200,12 @@ public partial class ActivityPage
 
     private static void AddSnapshotDetails(StackPanel content, WorkspaceActivityEntry entry)
     {
-        content.Children.Add(Line(Loc.T(entry.Kind == WorkspaceActivityKind.WorkspaceSaved
-            ? "Saved content" : "Desktop captured before this operation"), 15, top: 16));
+        content.Children.Add(Line(Loc.T(entry.Kind switch
+        {
+            WorkspaceActivityKind.WorkspaceSaved => "Saved content",
+            WorkspaceActivityKind.WorkspaceDeleted => "Content of the deleted workspace",
+            _ => "Desktop captured before this operation",
+        }), 15, top: 16));
         if (entry.Snapshot is not { } snapshot)
         {
             content.Children.Add(Line(Loc.T("The original snapshot is no longer available. Only recorded execution results are shown."),
@@ -254,9 +275,15 @@ public partial class ActivityPage
         if (entry.Outcome is not null)
             return Loc.T("Source: the result recorded by the restore itself. Every number comes from the real execution result, not from the saved content.");
 
-        return entry.Kind == WorkspaceActivityKind.WorkspaceSaved
-            ? Loc.T("Source: the current saved workspace. This is its latest save time, not a complete save history.")
-            : Loc.T("Source: a retained recovery checkpoint. It records the desktop before an operation; it does not prove that the restore completed. Older checkpoints may expire.");
+        return entry.Kind switch
+        {
+            WorkspaceActivityKind.WorkspaceSaved =>
+                Loc.T("Source: the current saved workspace. This is its latest save time, not a complete save history."),
+            WorkspaceActivityKind.WorkspaceDeleted =>
+                Loc.T("Source: the deletion record written when the workspace was removed. It carries the last saved summary only, and contains no restore result."),
+            _ =>
+                Loc.T("Source: a retained recovery checkpoint. It records the desktop before an operation; it does not prove that the restore completed. Older checkpoints may expire."),
+        };
     }
 }
 
