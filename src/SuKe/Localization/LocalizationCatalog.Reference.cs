@@ -61,6 +61,7 @@ internal static partial class LocalizationCatalog
         Add(entries, "Monitor {0}: {1} · {2} × {3} · {4}% · {5} window(s){6}", "显示器 {0}：{1} · {2} × {3} · {4}% · {5} 个窗口{6}");
         Add(entries, " · Primary", " · 主显示器");
         Add(entries, "Record identifiers", "记录标识");
+        Add(entries, "Select all restore entries", "全选恢复条目");
         Add(entries, "Unassigned monitor: {0} window(s)", "显示器未识别：{0} 个窗口");
         Add(entries, "Workspace ID: {0}", "工作区标识：{0}");
         Add(entries, "Checkpoint ID: {0}", "检查点标识：{0}");

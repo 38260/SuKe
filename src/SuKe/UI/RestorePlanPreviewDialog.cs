@@ -34,6 +34,8 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
     private readonly Dictionary<int, System.Windows.Controls.CheckBox> _rememberControls = new();
     private readonly bool _isWorkspaceSwitch;
     private readonly bool _isPreviewOnly;
+    private readonly System.Windows.Controls.CheckBox _selectAll;
+    private bool _updatingSelection;
 
     internal RestorePlan? ApprovedPlan { get; private set; }
     internal IReadOnlyList<WindowMatchHint> ApprovedMatchHints { get; private set; } =
@@ -148,6 +150,25 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         notices.Children.Add(_blockingNotice);
         Grid.SetRow(notices, 2);
         body.Children.Add(notices);
+
+        _selectAll = new System.Windows.Controls.CheckBox
+        {
+            Content = Loc.T("Select all"), Margin = new Thickness(0, 10, 0, 2),
+        };
+        AutomationProperties.SetName(_selectAll, "Select all restore entries");
+        _selectAll.Click += (_, _) =>
+        {
+            var selectable = _entryControls.Values.Where(control => control.IsEnabled).ToArray();
+            bool select = selectable.Any(control => control.IsChecked != true);
+            _updatingSelection = true;
+            try
+            {
+                foreach (var control in selectable) control.IsChecked = select;
+            }
+            finally { _updatingSelection = false; }
+            RefreshApprovalState();
+        };
+        notices.Children.Add(_selectAll);
 
         var entryPanel = new StackPanel { Margin = new Thickness(0, 12, 0, 10) };
         int tabIndex = 0;
@@ -479,7 +500,12 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
 
     private void RefreshApprovalState()
     {
-        if (_restoreButton is null || _selectionSummary is null || _blockingNotice is null) return;
+        if (_updatingSelection || _restoreButton is null || _selectionSummary is null || _blockingNotice is null) return;
+        var selectable = _entryControls.Values.Where(control => control.IsEnabled).ToArray();
+        int checkedCount = selectable.Count(control => control.IsChecked == true);
+        _selectAll.IsEnabled = selectable.Length > 0 && !_isPreviewOnly;
+        _selectAll.IsChecked = checkedCount == 0 ? false : checkedCount == selectable.Length ? true : null;
+        _selectAll.Content = Loc.T(checkedCount == selectable.Length && selectable.Length > 0 ? "Deselect all" : "Select all");
         RestorePlan approved = DeriveCurrentPlan();
         int selected = approved.Entries.Count(entry =>
             entry.Outcome is not (RestorePlanEntryOutcome.Excluded or RestorePlanEntryOutcome.Cancelled));
