@@ -2,7 +2,7 @@
 
 溯刻是一款 Windows 桌面工作区管理工具，用于保存窗口布局，并恢复受支持的应用、文件、浏览器会话和标签页。
 
-本项目基于 [WindowAnchor](https://github.com/marvintrvl/WindowAnchor) 改造，现以独立项目「溯刻 · SuKe」维护。
+本项目基于 [WindowAnchor](https://github.com/marvintrvl/WindowAnchor) 改造，现以独立项目「溯刻 · SuKe」维护。改造起点为上游提交 [`f6cb104`](https://github.com/marvintrvl/WindowAnchor/commit/f6cb104)（2026-09-30）。
 
 ## 使用
 
