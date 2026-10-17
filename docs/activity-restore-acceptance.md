@@ -9,7 +9,7 @@
 | A1 | 活动详情 | 展示工作区、操作类型、时间、真实结果、快照内容与应用分布、显示器配置、记录标识；关闭按钮固定 | 定向18/18通过 |
 | A2 | 恢复全选 | 全选/取消全选和单项三态同步；不改变不可选条目的限制 | 定向7/7通过 |
 | A3 | 已运行项目跳过 | 可勾选，保持现状；一行提示；不启动、移动或更改其标签页 | 定向77/77通过 |
-| A4 | 整体验收 | 定向与完整回归、Release 构建、启动入口检查、人工验收步骤 | 完整回归已执行，启动更新待旧进程退出 |
+| A4 | 整体验收 | 定向与完整回归、Release 构建、启动入口检查、人工验收步骤 | 已执行；保留既有测试失败与人工验收边界 |
 
 ## 数据口径
 
@@ -45,7 +45,9 @@
 - 跳过：需要显式开启的真实桌面采集测试，本轮未开启。
 - 首轮完整测试发现新增默认字段改变旧计划JSON指纹；`KeepRunning=false` 改为不序列化后，原有整对象指纹测试恢复通过，未修改旧断言或降低标准。
 - Release测试工程构建0错误，2～3项 `NU1900` 警告为NuGet漏洞源不可达；源码、WPF与测试程序集成功生成。
-- 根目录一键入口 `start-suke.bat --dry-run` 实际执行通过。当前旧进程锁定根目录程序；待正常退出后更新与验证真实入口。
+- 根目录一键入口 `start-suke.bat --dry-run` 实际执行通过。旧实例运行时入口返回2并保留进程；用户从托盘退出后，实际运行 `start-suke.bat`，Release构建0警告0错误，入口退出码0，新进程PID2912实际路径为根目录 `SuKe.exe`。根目录EXE和DLL与标准Release输出分别逐一核对SHA256一致。
+- 最终根目录 `SuKe.dll` SHA256：`37CF714B88738F0E3428392D17E5420AD7E48B8F62810EC50F1A18E2BE326AAF`；EXE SHA256：`5056B766E2F14C1F80785792EA7BAB8F13C1798A0BC9939FA4C6806C64856D37`。
+- 临时 `BuildOnly.targets` 已清理；保留验收构建与TRX报告。未对用户真实工作区执行恢复，也未将真实桌面恢复链路记为通过；请按下方步骤验收。
 - 已有 `.sentry-native/` 原样保留；`todo.md`、`项目记忆.md` 按现有约定仅本地维护。
 
 ## 人工验收
@@ -53,5 +55,13 @@
 1. 正常退出已有 SuKe，从根目录 `start-suke.bat` 启动当前版本。
 2. 在活动页打开保存活动详情，检查应用数量、标签页数量及显示器信息；缩小窗口后滚动，关闭按钮应始终可见。
 3. 打开恢复活动，核对真实执行统计，并区分“操作前的桌面快照”；老记录没有结果时应明确显示未知。
-4. 打开工作区恢复预览，操作全选、取消全选和单项勾选，检查选择状态同步。
+4. 打开某一个工作区的恢复预览，操作里面应用/窗口条目的全选、取消全选和单项勾选，检查选择状态同步。本轮新增全选位于 `RestorePlanPreviewDialog` 内；外层工作区列表的全选保持原样。
 5. 选择包含已运行窗口和待启动项目的工作区；已运行窗口应保持现状，提示显示跳过数量，待恢复项目正常执行。
+
+## 修改文件
+
+- 活动详情：`Models/WorkspaceActivity.cs`、`Services/Storage/WorkspaceActivityReader.cs`、`UI/Shell/ActivityPage.Details.cs`。
+- 单个工作区内的恢复选择与执行计划：`UI/RestorePlanPreviewDialog.cs`、`UI/RestorePlanPreviewWorkflow.cs`、`Services/Restore/RestoreApprovalProjector.cs`、`Services/Restore/RestorePlan.cs`、`Services/Restore/RestorePlanPreview.cs`。
+- 跳过结果与文案：`Models/RestoreOutcome.cs`、`Services/Restore/RestoreOutcomeProjector.cs`、`UI/Shell/RestoreOutcomeText.cs`、`Localization/LocalizationCatalog.Reference.cs`。
+- 正式测试：`tests/SuKe.Tests/ActivityDetailsUiTests.cs`、`tests/SuKe.Tests/WorkspaceActivityReaderTests.cs`、`tests/SuKe.Tests/RestoreSelectionUiTests.cs`、`tests/SuKe.Tests/RunningRestoreTests.cs`。
+- 上述产品源码路径均相对于 `src/SuKe`；本验收文档随代码提交，本地工程笔记按既有忽略约定维护。
