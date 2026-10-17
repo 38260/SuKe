@@ -69,6 +69,32 @@ public static class SmoothScrollBehavior
         if (viewer.GetValue(StateProperty) is ScrollGlide glide) glide.NavigateTo(offset, animate);
     }
 
+    /// <summary>
+    /// 把一次滚轮输入交给指定容器处理。
+    /// </summary>
+    /// <remarks>
+    /// 供「鼠标不在正文上、但希望滚动正文」的场景使用：设置页左侧目录把滚轮转给右侧正文，
+    /// 目录自身因此保持不动。调用方负责标记事件已处理，避免原生滚动再叠一次。
+    /// </remarks>
+    internal static void ScrollByWheel(ScrollViewer viewer, int delta)
+    {
+        SetEnabled(viewer, true);
+        if (viewer.GetValue(StateProperty) is ScrollGlide glide) glide.Wheel(delta);
+    }
+
+    /// <summary>让 <paramref name="source"/> 上的滚轮只驱动 <paramref name="target"/>，自己不滚。</summary>
+    internal static void ForwardWheel(ScrollViewer source, ScrollViewer target)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        source.PreviewMouseWheel += (_, e) =>
+        {
+            if (e.Delta == 0) return;
+            e.Handled = true;
+            ScrollByWheel(target, e.Delta);
+        };
+    }
+
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
         "State",
         typeof(ScrollGlide),
@@ -264,8 +290,16 @@ public static class SmoothScrollBehavior
 
             if (ShouldDeferToInnerScroller(e.OriginalSource as DependencyObject, _viewer, e.Delta)) return;
 
-            double step = WheelStepDips(e.Delta, SystemParameters.WheelScrollLines, _viewer.ViewportHeight);
-            if (Math.Abs(step) < MinimumOffsetChange) return;
+            if (Wheel(e.Delta)) e.Handled = true;
+        }
+
+        /// <summary>按一次滚轮刻度推进内容；返回是否真的接管了这次输入。</summary>
+        internal bool Wheel(int delta)
+        {
+            if (delta == 0) return false;
+
+            double step = WheelStepDips(delta, SystemParameters.WheelScrollLines, _viewer.ViewportHeight);
+            if (Math.Abs(step) < MinimumOffsetChange) return false;
 
             double current = _viewer.VerticalOffset;
             double maximum = Math.Max(0, _viewer.ScrollableHeight);
@@ -275,17 +309,16 @@ public static class SmoothScrollBehavior
 
             if (Math.Abs(target - current) < 0.5)
             {
-                // 已经在边界上：不吞掉事件，让外层滚动容器按原生规则接手。
+                // 已经在边界上：不接管事件，让外层滚动容器按原生规则接手。
                 Cancel();
                 _target = current;
-                return;
+                return false;
             }
 
-            e.Handled = true;
             _target = target;
             _direction = direction;
-
             StartGlide(current, target, animate: true);
+            return true;
         }
 
         internal void NavigateTo(double offset, bool animate)

@@ -199,6 +199,55 @@ public class SmoothScrollUiTests
         });
     }
 
+    /// <summary>设置页左侧目录把滚轮转给正文：目录保持不动，正文按一格推进。</summary>
+    [Fact]
+    public void Forwarded_wheel_scrolls_the_content_and_leaves_the_category_rail_still()
+    {
+        RunSta(() =>
+        {
+            var categoryContent = new StackPanel { Height = 320 };
+            var categories = new ScrollViewer
+            {
+                Content = categoryContent,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Width = 120,
+            };
+            var article = new Border { Height = 2400 };
+            var content = new ScrollViewer
+            {
+                Content = article,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            };
+            SmoothScrollBehavior.ForwardWheel(categories, content);
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Grid.SetColumn(categories, 0);
+            Grid.SetColumn(content, 1);
+            grid.Children.Add(categories);
+            grid.Children.Add(content);
+
+            var window = new Window { Content = grid, Width = 420, Height = 300, ShowInTaskbar = false };
+            try
+            {
+                window.Show();
+                Pump(60);
+                Assert.True(content.ScrollableHeight > 1000);
+                double step = SmoothScrollBehavior.WheelStepDips(
+                    -120, SystemParameters.WheelScrollLines, content.ViewportHeight);
+
+                Assert.True(Wheel(categories, -120).Handled, "目录上的滚轮应由转发逻辑接管。");
+                Pump(350);
+
+                Assert.Equal(step, content.VerticalOffset, 1);
+                Assert.Equal(0, categories.VerticalOffset, 1);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+
     internal static MouseWheelEventArgs Wheel(UIElement source, int delta)
     {
         var args = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, delta)

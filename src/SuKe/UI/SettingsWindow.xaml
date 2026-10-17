@@ -88,7 +88,7 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8,12,0,28" x:Name="BrandPanel">
-                        <Image Source="pack://application:,,,/SuKe;component/Resources/suke.ico" Width="34" Height="34" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <Image x:Name="BrandLogo" Source="pack://application:,,,/SuKe;component/Resources/suke-brand.png" Width="34" Height="34" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"/>
                         <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="溯刻 · SuKe" FontSize="21" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
                             <TextBlock Text="留住此刻，随时重来。" FontSize="10" Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
@@ -180,12 +180,13 @@
                                             <!-- ── Identity and actions ── -->
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="0"/>
+                                                    <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
 
-                                                <CheckBox Grid.Column="0" VerticalAlignment="Top" Margin="-20,4,0,0" IsChecked="{Binding IsSelected, Mode=TwoWay}" Checked="OnWorkspaceSelectionChanged" Unchecked="OnWorkspaceSelectionChanged" Opacity="0.35" ToolTip="{shell:LocalizedText 'Select workspace'}" HorizontalAlignment="Left"/>
+                                                <!-- 勾选框占自己的一列并留出右间距：原先宽度为 0 + 负边距，视觉上贴死在卡片左沿和序号徽章之间。 -->
+                                                <CheckBox Grid.Column="0" VerticalAlignment="Top" Margin="0,18,12,0" IsChecked="{Binding IsSelected, Mode=TwoWay}" Checked="OnWorkspaceSelectionChanged" Unchecked="OnWorkspaceSelectionChanged" Opacity="0.45" ToolTip="{shell:LocalizedText 'Select workspace'}" HorizontalAlignment="Left"/>
 
                                                 <!-- View mode: slot badge, name, and the monitor/window summary -->
                                                 <StackPanel Grid.Column="2" Style="{StaticResource HideWhenEditing}" VerticalAlignment="Center">
@@ -220,7 +221,7 @@
                                                         </Grid>
 
                                             <!-- ── Apps this workspace brings back ── -->
-                                            <ItemsControl Margin="92,16,0,12" Style="{StaticResource HideWhenEditing}" ItemsSource="{Binding Converter={StaticResource ReferenceAppIcons}}">
+                                            <ItemsControl Margin="124,16,0,12" Style="{StaticResource HideWhenEditing}" ItemsSource="{Binding Converter={StaticResource ReferenceAppIcons}}">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
                                                         <WrapPanel/>

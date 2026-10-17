@@ -1441,6 +1441,7 @@ internal static partial class LocalizationCatalog
         Add(entries, "Actual size", "实际大小");
         Add(entries, "Fit to window", "适应窗口");
         Add(entries, "Zoom {0} percent", "缩放 {0}%");
+        Add(entries, "Settings categories", "设置分类");
         Add(entries, "Ready  ·  {0} monitor connected", "就绪 · 已连接 {0} 台显示器");
         Add(entries, "Ready  ·  {0} monitors connected", "就绪 · 已连接 {0} 台显示器");
         Add(entries, "Restore", "恢复");
