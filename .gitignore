@@ -92,6 +92,8 @@ build-verify/
 build-out/
 .tmp-asar/
 .workbuddy/
+# Sentry Native 运行期目录：崩溃转储与会话数据，随进程在本地生成
+.sentry-native/
 参考图/
 
 # ── 内部工程笔记（仅本地维护，不公开）─────────────────────────

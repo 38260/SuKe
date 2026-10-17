@@ -742,15 +742,18 @@
                         </ScrollViewer>
                     <Border Style="{StaticResource WaCard}" Padding="12" Margin="0,0,16,16" Grid.Column="0"><ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Margin="0">
                         <StackPanel Margin="0,0,8,12">
+                            <!-- 顺序必须与右侧正文的分段顺序一致（System → Appearance → Restore → Browser → Monitors
+                                 → Paths → Matching → Startup → Hotkeys）。两边不一致时，点选会跳到页面中段，
+                                 滚动时的跟随高亮也会逆向跳动。 -->
                             <RadioButton x:Name="CategorySystem" Style="{StaticResource WaCategoryItem}" GroupName="WaSettingsCategory" IsChecked="True" Tag="{x:Static ui:SymbolRegular.Desktop24}" Content="{shell:LocalizedText 'System'}" Checked="OnSettingsCategoryChecked"/>
                             <RadioButton x:Name="CategoryAppearance" Style="{StaticResource WaCategoryItem}" GroupName="WaSettingsCategory" Tag="{x:Static ui:SymbolRegular.PaintBrush24}" Content="{shell:LocalizedText 'Appearance &amp; Language'}" Checked="OnSettingsCategoryChecked"/>
+                            <RadioButton x:Name="CategoryRestore" Style="{StaticResource WaCategoryItem}" GroupName="WaSettingsCategory" Tag="{x:Static ui:SymbolRegular.ArrowCounterclockwise24}" Content="{shell:LocalizedText 'Restore Workflow'}" Checked="OnSettingsCategoryChecked"/>
                             <RadioButton x:Name="CategoryBrowser" Style="{StaticResource WaCategoryItem}" GroupName="WaSettingsCategory" Tag="{x:Static ui:SymbolRegular.Globe24}" Content="{shell:LocalizedText 'Browser Integration'}" Checked="OnSettingsCategoryChecked"/>
+                            <RadioButton x:Name="CategoryMonitors" Style="{StaticResource WaCategoryItem}" GroupName="WaSettingsCategory" Tag="{x:Static ui:SymbolRegular.DesktopMac24}" Content="{shell:LocalizedText 'Monitors'}" Checked="OnSettingsCategoryChecked"/>
                             <RadioButton x:Name="CategoryPaths" Style="{StaticResource WaCategoryItem}" GroupName="WaSettingsCategory" Tag="{x:Static ui:SymbolRegular.FolderArrowRight24}" Content="{shell:LocalizedText 'Path Portability'}" Checked="OnSettingsCategoryChecked"/>
                             <RadioButton x:Name="CategoryMatching" Style="{StaticResource WaCategoryItem}" GroupName="WaSettingsCategory" Tag="{x:Static ui:SymbolRegular.AppsList24}" Content="{shell:LocalizedText 'Window Matching'}" Checked="OnSettingsCategoryChecked"/>
-                            <RadioButton x:Name="CategoryRestore" Style="{StaticResource WaCategoryItem}" GroupName="WaSettingsCategory" Tag="{x:Static ui:SymbolRegular.ArrowCounterclockwise24}" Content="{shell:LocalizedText 'Restore Workflow'}" Checked="OnSettingsCategoryChecked"/>
                             <RadioButton x:Name="CategoryStartup" Style="{StaticResource WaCategoryItem}" GroupName="WaSettingsCategory" Tag="{x:Static ui:SymbolRegular.Power24}" Content="{shell:LocalizedText 'Startup'}" Checked="OnSettingsCategoryChecked"/>
                             <RadioButton x:Name="CategoryHotkeys" Style="{StaticResource WaCategoryItem}" GroupName="WaSettingsCategory" Tag="{x:Static ui:SymbolRegular.Keyboard24}" Content="{shell:LocalizedText 'Keyboard Shortcuts'}" Checked="OnSettingsCategoryChecked"/>
-                            <RadioButton x:Name="CategoryMonitors" Style="{StaticResource WaCategoryItem}" GroupName="WaSettingsCategory" Tag="{x:Static ui:SymbolRegular.DesktopMac24}" Content="{shell:LocalizedText 'Monitors'}" Checked="OnSettingsCategoryChecked"/>
                         </StackPanel>
                         </ScrollViewer>
 

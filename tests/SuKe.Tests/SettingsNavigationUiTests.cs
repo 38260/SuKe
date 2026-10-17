@@ -60,6 +60,70 @@ public class SettingsNavigationUiTests
         });
     }
 
+    /// <summary>右侧正文自己滚动时，左侧选中项跟着走；点选后的缓出期间不被半路的分段抢走。</summary>
+    [Fact]
+    public void Scrolling_the_content_moves_the_highlighted_category()
+    {
+        SmoothScrollUiTests.RunSta(() =>
+        {
+            var first = new RadioButton { GroupName = "Category", IsChecked = true };
+            var second = new RadioButton { GroupName = "Category" };
+            var third = new RadioButton { GroupName = "Category" };
+            var content = new StackPanel { Width = 600 };
+            var sections = new[]
+            {
+                new StackPanel { Height = 360 },
+                new StackPanel { Height = 360 },
+                new StackPanel { Height = 360 },
+            };
+            foreach (StackPanel section in sections) content.Children.Add(section);
+            var viewer = new ScrollViewer { Content = content };
+            _ = new SettingsSectionNavigator(viewer, new Dictionary<RadioButton, FrameworkElement>
+            {
+                [first] = sections[0], [second] = sections[1], [third] = sections[2],
+            });
+            var categories = new StackPanel { Orientation = Orientation.Horizontal };
+            categories.Children.Add(first);
+            categories.Children.Add(second);
+            categories.Children.Add(third);
+            var layout = new DockPanel();
+            DockPanel.SetDock(categories, Dock.Top);
+            layout.Children.Add(categories);
+            layout.Children.Add(viewer);
+            var window = new Window { Content = layout, Width = 450, Height = 300, ShowInTaskbar = false };
+            try
+            {
+                window.Show();
+                SmoothScrollUiTests.Pump(60);
+
+                viewer.ScrollToVerticalOffset(360);
+                SmoothScrollUiTests.Pump(60);
+                Assert.True(second.IsChecked, "滚到第二段时第二个分类应被选中。");
+                Assert.False(first.IsChecked);
+
+                viewer.ScrollToVerticalOffset(720);
+                SmoothScrollUiTests.Pump(60);
+                Assert.True(third.IsChecked);
+
+                // 滚到底：最后一段的标题可能还没越过检测线，仍然算当前段。
+                viewer.ScrollToBottom();
+                SmoothScrollUiTests.Pump(60);
+                Assert.True(third.IsChecked);
+
+                viewer.ScrollToVerticalOffset(0);
+                SmoothScrollUiTests.Pump(60);
+                Assert.True(first.IsChecked);
+
+                // 点选后缓出过程中不反向同步，否则高亮会在半路的分段上闪一下再回来。
+                second.IsChecked = true;
+                SmoothScrollUiTests.Pump(400);
+                Assert.True(second.IsChecked);
+                Assert.Equal(360, viewer.VerticalOffset, 2);
+            }
+            finally { window.Close(); }
+        });
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
