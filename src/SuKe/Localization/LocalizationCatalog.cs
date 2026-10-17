@@ -30,6 +30,7 @@ internal static partial class LocalizationCatalog
         AddSettingsWindow(entries);
         AddHelpWindow(entries);
         AddSaveWorkspaceDialog(entries);
+        AddRestorePreviewDialog(entries);
         AddDialogs(entries);
         AddCodeMessages(entries);
         AddRestorePlanPresentation(entries);
@@ -352,6 +353,50 @@ internal static partial class LocalizationCatalog
     }
 
     // ── Dialogs built in code (UI/*.cs) ──────────────────────────────────────────────────────
+
+    // ── Restore preview dialog (grouped-by-application redesign) ──────────────────────────────
+
+    private static void AddRestorePreviewDialog(Dictionary<string, string> entries)
+    {
+        Add(entries, "Restore \"{0}\"", "恢复「{0}」");
+        Add(entries, "{0} apps · {1} windows", "{0} 个应用 · {1} 个窗口");
+        Add(entries, "{0} applications, {1} saved windows", "{0} 个应用，{1} 个已保存窗口");
+        Add(entries, "Restore plan preview for {0}", "{0} 的恢复计划预览");
+        Add(entries, "Select all windows", "全选窗口");
+        Add(entries, "Select all restore entries", "全选全部恢复条目");
+        Add(entries, "Expand", "展开");
+        Add(entries, "Expand or collapse {0}", "展开或收起 {0}");
+        Add(entries, "Include every {0} window", "包含 {0} 的所有窗口");
+        Add(entries, "{0} windows", "{0} 个窗口");
+        Add(entries, "To restore", "待恢复");
+        Add(entries, "Already running · skipped", "已运行 · 跳过");
+        Add(entries, "Not restorable", "无法恢复");
+        Add(entries, "Not restorable: {0}", "无法恢复：{0}");
+        Add(entries, "Choose the matching window", "请选择对应窗口");
+        Add(entries, "Cleared", "已取消");
+        Add(entries, "Not selected", "未选择");
+        Add(entries, "Restore {0} · skip {1}", "恢复 {0} 个 · 跳过 {1} 个");
+        Add(entries, "Restore {0} · {1} not restorable", "恢复 {0} 个 · {1} 个无法恢复");
+        Add(entries, "Selected {0} windows · restoring {1} · skipping {2} already running",
+            "已选 {0} 个窗口 · 将恢复 {1} 个 · 已运行跳过 {2} 个");
+        Add(entries, "Restore {0} windows", "恢复 {0} 个窗口");
+        Add(entries, "Switch {0} windows", "切换 {0} 个窗口");
+        Add(entries, "Show match details", "显示匹配详情");
+        Add(entries, "View details", "查看详情");
+        Add(entries, "Target: {0}", "目标：{0}");
+        Add(entries, "Saved resource is no longer available.", "保存的资源已不存在。");
+        Add(entries, "Kept as it is; nothing will be launched, moved or reopened.",
+            "保持现状：不启动、不移动、不重新打开。");
+        Add(entries, "Preview only: no windows or browser sessions will be changed.",
+            "仅预览：不会更改任何窗口或浏览器会话。");
+        Add(entries, "{0} selected windows cannot be restored. Clear them to continue.",
+            "已选的 {0} 个窗口无法恢复，取消勾选后才能继续。");
+        Add(entries, "Unrelated open windows may ask to save before they close; SuKe never force-closes them.",
+            "无关窗口可能弹出保存提示后才关闭；SuKe 不会强制关闭它们。");
+        Add(entries, "Other open windows will be minimized. No window will be closed.",
+            "其他窗口会被最小化，不会关闭任何窗口。");
+        Add(entries, "Select {0}. {1}", "选择 {0}。{1}");
+    }
 
     private static void AddDialogs(Dictionary<string, string> entries)
     {
