@@ -31,9 +31,9 @@ dotnet build SuKe.sln -c Release
 dotnet test SuKe.sln -c Release
 ```
 
-构建输出为 `src/SuKe/bin/Release/net8.0-windows/SuKe.exe`。本机已配置的SDK也可通过 `D:/env/dotnet-sdk/dotnet.exe` 调用。
+构建输出为 `src/SuKe/bin/Release/net8.0-windows/SuKe.exe`。
 
-发布、独立构建和验证方式见 [build.md](build.md)。最新任务见 [todo.md](todo.md)，工程约束见 [项目记忆.md](项目记忆.md)。历史验收记录不代表当前版本已经全部通过。
+发布、独立构建和验证方式见 [build.md](build.md)。历史验收记录不代表当前版本已经全部通过。
 
 ## 浏览器连接器
 
