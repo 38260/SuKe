@@ -31,6 +31,9 @@ public enum RestoreOutcomeStatus
 
     /// <summary>旧记录没有保存恢复结果，无法判断成功或失败。</summary>
     Unknown,
+
+    /// <summary>全部目标按策略跳过，没有执行恢复动作。</summary>
+    Skipped,
 }
 
 /// <summary>按单一内容类型统计的一组数量。</summary>

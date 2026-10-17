@@ -24,6 +24,7 @@ internal static class RestoreOutcomeText
         RestoreOutcomeStatus.PartiallyCompleted => "Partially completed",
         RestoreOutcomeStatus.Failed => "Failed",
         RestoreOutcomeStatus.Cancelled => "Cancelled",
+        RestoreOutcomeStatus.Skipped => "All targets skipped",
         RestoreOutcomeStatus.StalePlan => "Plan became stale",
         RestoreOutcomeStatus.Blocked => "Blocked before any change",
         RestoreOutcomeStatus.Interrupted => "Interrupted / result unknown",
@@ -57,6 +58,7 @@ internal static class RestoreOutcomeText
     /// <summary>原因码的可读标签。未知原因码原样返回，便于排查。</summary>
     internal static string ReasonLabel(string code) => code switch
     {
+        "already_running" => Loc.T("Already running; this item was kept unchanged and skipped."),
         "placement_verification_failed" => Loc.T("The window moved, but its final placement could not be verified"),
         "entry_failed" => Loc.T("An execution step for this window failed"),
         "entry_blocked" => Loc.T("A precondition for this window was missing"),

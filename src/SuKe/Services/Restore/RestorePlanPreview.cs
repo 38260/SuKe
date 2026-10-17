@@ -71,6 +71,7 @@ public sealed record RestorePlanPreviewEntry(
     IReadOnlyList<RestorePlanPreviewCandidate> Candidates)
 {
     public string PolicyLabel { get; init; } = "Workspace mode default";
+    public bool KeepRunning { get; init; }
 }
 
 /// <summary>
@@ -159,9 +160,9 @@ public static class RestorePlanPreviewBuilder
         if (entry.TargetPlacement.WasDpiScaled)
             target += $" · DPI {entry.TargetPlacement.SavedDpi}→{entry.TargetPlacement.TargetDpi}";
 
-        bool enabled = entry.Outcome is not (RestorePlanEntryOutcome.Excluded or
+        bool enabled = entry.KeepRunning || entry.Outcome is not (RestorePlanEntryOutcome.Excluded or
             RestorePlanEntryOutcome.Cancelled);
-        string outcomeLabel = OutcomeLabel(outcome);
+        string outcomeLabel = entry.KeepRunning ? "Already running · skipped" : OutcomeLabel(outcome);
         RestorePlanPreviewCandidate[] candidates = entry.Candidates
             .Where(candidate => candidate.IsEligible &&
                 (outcome == RestorePreviewOutcomeKind.Ambiguous
@@ -200,7 +201,8 @@ public static class RestorePlanPreviewBuilder
             entry.BlockingErrors.Select(issue => issue.Explanation).ToArray(),
             candidates)
         {
-            PolicyLabel = RestorePolicyResolver.Label(entry.RestorePolicy)
+            PolicyLabel = RestorePolicyResolver.Label(entry.RestorePolicy),
+            KeepRunning = entry.KeepRunning,
         };
     }
 

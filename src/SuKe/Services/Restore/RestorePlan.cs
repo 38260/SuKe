@@ -446,6 +446,9 @@ public sealed record RestorePlanEntry(
     /// <summary>Saved File Explorer tabs to reconcile after the target window is ready.</summary>
     public RestoreExplorerSession? ExplorerSession { get; init; }
 
+    /// <summary>普通恢复中保留已运行窗口；可勾选，但没有任何执行动作。</summary>
+    public bool KeepRunning { get; init; }
+
     /// <summary>Optional saved virtual-desktop GUID retained for an explicit preview choice.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? VirtualDesktopId { get; init; }

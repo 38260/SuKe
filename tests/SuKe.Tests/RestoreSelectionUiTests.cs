@@ -67,6 +67,47 @@ public class RestoreSelectionUiTests
         });
     }
 
+    [Fact]
+    public void Selected_running_item_can_be_toggled_and_approved_as_skipped()
+    {
+        SmoothScrollUiTests.RunSta(() =>
+        {
+            RestorePlanEntry running = Entry(0, RestorePlanEntryOutcome.Matched);
+            var dialog = new RestorePlanPreviewDialog(new RestorePlan
+            {
+                Mode = RestoreModeKind.Resume, Entries = [running], Actions = running.Actions,
+            });
+            dialog.Resources.MergedDictionaries.Add(ActivityDetailsUiTests.Resources());
+            // 模态窗口先建立真实所属窗口，与生产界面提供 Owner 的方式一致。
+            var owner = new Window { Width = 400, Height = 300, ShowInTaskbar = false };
+            owner.Show();
+            dialog.Owner = owner;
+            dialog.Loaded += (_, _) => dialog.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                try
+                {
+                    var all = Master(dialog);
+                    Assert.True(Assert.Single(Rows(dialog)).IsChecked);
+                    Click(all);
+                    Assert.False(Rows(dialog)[0].IsChecked);
+                    Click(all);
+                    var restore = ActivityDetailsUiTests.Walk(dialog).OfType<Wpf.Ui.Controls.Button>().Single(button => button.IsDefault);
+                    Assert.True(restore.IsEnabled);
+                    restore.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                }
+                catch { dialog.Close(); throw; }
+            }));
+            try
+            {
+                Assert.True(dialog.ShowDialog());
+                Assert.True(Assert.Single(dialog.ApprovedPlan!.Entries).KeepRunning);
+                Assert.Empty(dialog.ApprovedPlan.Actions);
+                Assert.Empty(dialog.ApprovedPlan.DisabledEntryIndexes);
+            }
+            finally { dialog.Close(); owner.Close(); }
+        });
+    }
+
     internal static CheckBox Master(RestorePlanPreviewDialog dialog) => ActivityDetailsUiTests.Walk(dialog)
         .OfType<CheckBox>().Single(check => AutomationProperties.GetName(check) == "Select all restore entries");
 

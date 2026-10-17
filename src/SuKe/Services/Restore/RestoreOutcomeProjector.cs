@@ -180,6 +180,9 @@ internal static class RestoreOutcomeProjector
                     break;
                 case RestoreExecutionEntryStatus.Excluded:
                     counts.Skipped++;
+                    if (entry.KeepRunning)
+                        AddIssue(issues, "already_running", "window", entry, outcome.Explanation,
+                            "Already running; this item was kept unchanged and skipped.");
                     break;
                 case RestoreExecutionEntryStatus.Blocked:
                     counts.Blocked++;
@@ -395,6 +398,9 @@ internal static class RestoreOutcomeProjector
         int trouble = Trouble(windows) + Trouble(browser) + Trouble(explorer) + Trouble(terminal);
         if (trouble == 0) return RestoreOutcomeStatus.Succeeded;
 
+        int planned = windows.Planned + browser.Planned + explorer.Planned + terminal.Planned;
+        int skipped = windows.Skipped + browser.Skipped + explorer.Skipped + terminal.Skipped;
+        if (planned > 0 && skipped == planned) return RestoreOutcomeStatus.Skipped;
         int succeeded = windows.Succeeded + browser.Succeeded + explorer.Succeeded + terminal.Succeeded;
         return succeeded == 0 && windows.Failed > 0
             ? RestoreOutcomeStatus.Failed

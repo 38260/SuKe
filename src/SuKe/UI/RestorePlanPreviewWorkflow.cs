@@ -121,7 +121,7 @@ internal static class RestorePlanPreviewWorkflow
 
         try
         {
-            RestorePlan preview = coordinator.CreateRestorePlan(snapshot, mode);
+            RestorePlan preview = RestoreApprovalProjector.PreserveRunningEntries(coordinator.CreateRestorePlan(snapshot, mode));
             RestorePlan approvedPlan = preview;
             System.Collections.Generic.IReadOnlyList<WindowMatchHint> approvedHints =
                 Array.Empty<WindowMatchHint>();

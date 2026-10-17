@@ -7,6 +7,58 @@ namespace SuKe.Services;
 /// <summary>Pure approval projection over an already-built restore preview.</summary>
 internal static class RestoreApprovalProjector
 {
+    /// <summary>普通恢复保留已匹配窗口；显式移动、修复、新开和切换模式继续按其含义执行。</summary>
+    internal static RestorePlan PreserveRunningEntries(RestorePlan plan)
+    {
+        if (plan.Mode is not (SuKe.Models.RestoreModeKind.Resume or SuKe.Models.RestoreModeKind.Selective))
+            return plan;
+        RestorePlanEntry[] running = plan.Entries.Where(entry =>
+            !plan.DisabledEntryIndexes.Contains(entry.EntryIndex) &&
+            entry.Outcome is not (RestorePlanEntryOutcome.Excluded or RestorePlanEntryOutcome.Cancelled) &&
+            (entry.SelectedMatch is { IsEligible: true } || entry.Outcome == RestorePlanEntryOutcome.AwaitingRunningApplication) &&
+            !entry.Warnings.Any(issue => issue.Code == RestorePlanIssueCode.AmbiguousMatch)).ToArray();
+        if (running.Length == 0) return plan;
+
+        HashSet<int> indexes = running.Select(entry => entry.EntryIndex).ToHashSet();
+        HashSet<string> entryIds = running.Select(entry => entry.EntryId).ToHashSet(StringComparer.Ordinal);
+        HashSet<string> browsers = running.Where(entry => !entry.SavedIdentity.IsWebApp &&
+                !entry.SavedIdentity.IsDedicatedBrowserWindow &&
+                RestorePlannerPolicies.IsBrowserProcess(entry.SavedIdentity.ProcessName))
+            .SelectMany(entry => new[] { entry.SavedIdentity.BrowserFamily, entry.SavedIdentity.ProcessName })
+            .Where(name => !string.IsNullOrWhiteSpace(name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        RestoreBrowserSession[] sessions = plan.BrowserSessions.Where(session =>
+            !string.IsNullOrEmpty(session.LinkedEntryId)
+                ? !entryIds.Contains(session.LinkedEntryId)
+                : !browsers.Contains(session.Browser)).ToArray();
+        RestoreAction Adapt(RestoreAction action) => sessions.Length == 0 &&
+            action.Condition == RestoreActionCondition.BrowserSessionUnavailable
+                ? action with { Condition = RestoreActionCondition.Always }
+                : action;
+        RestoreAction[] actions = plan.Actions.Where(action =>
+                action.EntryIndex is not int index || !indexes.Contains(index))
+            .Where(action => sessions.Length > 0 || action.Kind != RestoreActionKind.RestoreBrowserSession)
+            .Select(Adapt).ToArray();
+        return plan with
+        {
+            Entries = plan.Entries.Select(entry => indexes.Contains(entry.EntryIndex)
+                ? entry with
+                {
+                    KeepRunning = true, Outcome = RestorePlanEntryOutcome.Excluded,
+                    Explanation = "Already running; this item will be kept unchanged and skipped.",
+                    Actions = Array.Empty<RestoreAction>(), ExplorerSession = null,
+                    LaunchRequirement = RestoreLaunchRequirement.None("Already running; no launch is approved."),
+                    Warnings = Array.Empty<RestorePlanIssue>(), BlockingErrors = Array.Empty<RestorePlanIssue>(),
+                }
+                : entry with { Actions = entry.Actions.Select(Adapt).ToArray() }).ToArray(),
+            Actions = actions, BrowserSessions = sessions,
+            Warnings = plan.Warnings.Except(running.SelectMany(entry => entry.Warnings)).ToArray(),
+            BlockingErrors = plan.BlockingErrors.Except(running.SelectMany(entry => entry.BlockingErrors)).ToArray(),
+            ProtectedWindowHandles = plan.ProtectedWindowHandles.Concat(running.Select(entry => entry.SelectedMatch?.WindowHandle).OfType<long>()).ToHashSet(),
+            VirtualDesktops = actions.Any(action => action.Kind == RestoreActionKind.MoveWindowToVirtualDesktop)
+                ? plan.VirtualDesktops : Array.Empty<SuKe.Models.SavedVirtualDesktop>(),
+        };
+    }
+
     /// <summary>
     /// Derives an approved plan from an immutable preview without observing the environment or
     /// recomputing any match. Disabled entries retain their preview evidence but contribute no
@@ -25,7 +77,7 @@ internal static class RestoreApprovalProjector
             .ToHashSet();
         bool disabledOrdinaryBrowser = preview.Entries.Any(entry =>
             disabled.Contains(entry.EntryIndex) &&
-            !entry.SavedIdentity.IsWebApp &&
+            !entry.KeepRunning && !entry.SavedIdentity.IsWebApp &&
             !entry.SavedIdentity.IsDedicatedBrowserWindow &&
             !string.IsNullOrWhiteSpace(entry.SavedIdentity.BrowserFamily));
 
@@ -47,6 +99,7 @@ internal static class RestoreApprovalProjector
                 return entry with
                 {
                     Outcome = RestorePlanEntryOutcome.Excluded,
+                    KeepRunning = false,
                     Explanation = "The user disabled this entry in the approved preview.",
                     LaunchRequirement = RestoreLaunchRequirement.None(
                         "No launch is approved for a disabled entry."),

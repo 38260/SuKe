@@ -46,7 +46,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         _workingPlan = previewPlan ?? throw new ArgumentNullException(nameof(previewPlan));
         _isWorkspaceSwitch = isWorkspaceSwitch;
         _isPreviewOnly = previewPlan.Mode == RestoreModeKind.PreviewOnly;
-        RestorePlanPreview preview = RestorePlanPreviewBuilder.Build(_workingPlan);
+        RestorePlanPreview preview = RestorePlanPreviewBuilder.Build(PrepareRestorePlan(_workingPlan));
 
         string operation = Loc.T(_isPreviewOnly ? "preview" : isWorkspaceSwitch ? "switch" : "restore");
         string variantLabel = string.IsNullOrWhiteSpace(previewPlan.LayoutVariantName)
@@ -251,7 +251,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
                 return;
             }
             ApprovedPlan = DeriveCurrentPlan();
-            if (!ApprovedPlan.CanExecute || ApprovedPlan.Actions.Count == 0) return;
+            if (!ApprovedPlan.CanExecute || (ApprovedPlan.Actions.Count == 0 && !ApprovedPlan.Entries.Any(entry => entry.KeepRunning))) return;
             ApprovedMatchHints = _rememberControls
                 .Where(item => item.Value.IsChecked == true)
                 .Select(item => ApprovedPlan.Entries.Single(entry =>
@@ -304,7 +304,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         var checkBox = new System.Windows.Controls.CheckBox
         {
             IsChecked = entry.IsInitiallyEnabled,
-            IsEnabled = entry.Outcome is not (RestorePreviewOutcomeKind.Skipped or
+            IsEnabled = entry.KeepRunning || entry.Outcome is not (RestorePreviewOutcomeKind.Skipped or
                 RestorePreviewOutcomeKind.Cancelled),
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 3, 10, 0),
@@ -358,7 +358,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             Margin = new Thickness(0, 0, 0, 4),
             Foreground = Brush("TextFillColorTertiaryBrush", Brushes.Gray)
         });
-        if (entry.Candidates.Count > 0)
+        if (entry.Candidates.Count > 0 && !entry.KeepRunning)
             details.Children.Add(BuildCandidatePanel(entry));
         var actionPanel = new StackPanel();
         _entryActionPanels[entry.EntryIndex] = actionPanel;
@@ -507,17 +507,21 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
         _selectAll.IsChecked = checkedCount == 0 ? false : checkedCount == selectable.Length ? true : null;
         _selectAll.Content = Loc.T(checkedCount == selectable.Length && selectable.Length > 0 ? "Deselect all" : "Select all");
         RestorePlan approved = DeriveCurrentPlan();
-        int selected = approved.Entries.Count(entry =>
-            entry.Outcome is not (RestorePlanEntryOutcome.Excluded or RestorePlanEntryOutcome.Cancelled));
+        int selected = _entryControls.Values.Count(control => control.IsEnabled && control.IsChecked == true);
+        int running = approved.Entries.Count(entry => entry.KeepRunning);
         int blockers = approved.BlockingErrors.Count;
         _selectionSummary.Text = _isPreviewOnly
             ? Loc.Format("{0} entries · preview only", approved.Entries.Count)
             : blockers > 0
             ? Loc.Format("{0} selected · {1} blocking error(s)", selected, blockers)
+            : running > 0
+            ? Loc.Format("{0} selected · {1} already running, kept unchanged and skipped", selected, running)
             : Loc.Format("{0} selected · ready to {1}", selected, Loc.T(_isWorkspaceSwitch ? "switch" : "restore"));
+        _selectionSummary.TextWrapping = TextWrapping.Wrap;
+        _selectionSummary.Margin = new Thickness(0, 0, 12, 0);
         _blockingNotice.Visibility = blockers > 0 ? Visibility.Visible : Visibility.Collapsed;
         _restoreButton.IsEnabled = _isPreviewOnly ||
-            (approved.CanExecute && approved.Actions.Count > 0);
+            (approved.CanExecute && (approved.Actions.Count > 0 || running > 0));
         foreach (((int entryIndex, long handle), System.Windows.Controls.RadioButton radio) in _candidateControls)
         {
             RestorePlanEntry? entry = _workingPlan.Entries.SingleOrDefault(item =>
@@ -565,7 +569,7 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
                 Margin = new Thickness(0, 0, 0, 3),
                 Foreground = Brush("TextFillColorTertiaryBrush", Brushes.Gray)
             });
-            foreach (RestorePlanPreviewAction action in entry.Actions)
+            foreach (RestorePlanPreviewAction action in entry.KeepRunning ? Array.Empty<RestorePlanPreviewAction>() : entry.Actions)
             {
                 var actionText = new System.Windows.Controls.TextBlock
                 {
@@ -616,8 +620,11 @@ internal sealed class RestorePlanPreviewDialog : FluentWindow
             .Where(item => item.Value.IsEnabled && item.Value.IsChecked != true)
             .Select(item => item.Key)
             .ToArray();
-        return RestorePlanner.DeriveApprovedPlan(_workingPlan, disabled);
+        return PrepareRestorePlan(RestorePlanner.DeriveApprovedPlan(_workingPlan, disabled));
     }
+
+    private RestorePlan PrepareRestorePlan(RestorePlan plan) => _isWorkspaceSwitch || _isPreviewOnly
+        ? plan : RestoreApprovalProjector.PreserveRunningEntries(plan);
 
     private static Border Notice(string text, Brush border, Brush background) => new()
     {
