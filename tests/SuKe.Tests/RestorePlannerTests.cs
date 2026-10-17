@@ -248,6 +248,44 @@ public class RestorePlannerTests
             warning => warning.Code == RestorePlanIssueCode.RunningApplicationHasNoRestorableWindow);
     }
 
+    /// <summary>
+    /// 历史工作区里混入的外壳表面（宿主窗口类 + 标题、AUMID、文件夹、网址、标签页、
+    /// 打开的文件与启动参数全为空）在规划阶段就被跳过：不进计划，因此不显示、
+    /// 不执行、不计数；真实窗口仍保留原始条目索引。
+    /// </summary>
+    [Fact]
+    public void Saved_shell_surface_without_any_restorable_context_is_skipped_by_the_plan()
+    {
+        WorkspaceEntry phantom = Entry(@"C:\Windows\explorer.exe", "", "primary");
+        phantom.WindowClassName = "ApplicationFrameWindow";
+        WorkspaceEntry real = Entry(@"C:\Windows\explorer.exe", "随机过程 - 文件资源管理器", "primary");
+        real.WindowClassName = "CabinetWClass";
+        real.Position.FolderPath = @"D:\docs\随机过程";
+
+        Assert.True(ShellSurfaceFilter.IsSavedShellSurface(phantom));
+        Assert.False(ShellSurfaceFilter.IsSavedShellSurface(real));
+
+        RestorePlan plan = Build(Snapshot(phantom, real));
+
+        RestorePlanEntry planned = Assert.Single(plan.Entries);
+        Assert.Equal(1, planned.EntryIndex);
+        Assert.DoesNotContain(plan.Actions, action => action.EntryIndex == 0);
+    }
+
+    /// <summary>带上下文的外壳宿主窗口仍然保留：它是用户真正打开的窗口。</summary>
+    [Fact]
+    public void Shell_host_class_entry_with_restorable_context_is_kept()
+    {
+        WorkspaceEntry entry = Entry(@"C:\Apps\Frame.exe", "Nahimic", "primary");
+        entry.WindowClassName = "ApplicationFrameWindow";
+        entry.AppUserModelId = "Nahimic.App";
+
+        Assert.False(ShellSurfaceFilter.IsSavedShellSurface(entry));
+
+        RestorePlan plan = Build(Snapshot(entry));
+        Assert.Single(plan.Entries);
+    }
+
     [Fact]
     public void Same_process_name_at_a_different_known_path_does_not_suppress_launch()
     {

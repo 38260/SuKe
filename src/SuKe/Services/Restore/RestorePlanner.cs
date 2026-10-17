@@ -222,6 +222,13 @@ public static class RestorePlanner
                 continue;
             }
 
+            // 历史工作区里可能混入了操作系统自己的外壳表面：窗口类属于系统 XAML 宿主，
+            // 且标题、AUMID、文件夹、网址、标签页、打开的文件与启动参数全为空。
+            // 它既无法匹配也无法有意义地重启，直接跳过——不进计划，因此不显示、不执行、不计数。
+            // 原始文件保持不动，不触碰用户已保存的数据。
+            if (ShellSurfaceFilter.IsSavedShellSurface(entry))
+                continue;
+
             if (!IncludedByMode(entry, mode.Kind, selectedMonitorSet))
             {
                 planEntries.Add(CreateEntry(

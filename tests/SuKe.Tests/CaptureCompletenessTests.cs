@@ -23,6 +23,59 @@ public class CaptureCompletenessTests
         Assert.False(WindowCapturePolicy.IncludesShellCloakedTask(window, WindowCandidatePolicy.SwitchCloseCandidate, unknown));
     }
 
+    /// <summary>
+    /// 操作系统自己的外壳表面：被 Shell 隐藏、虚拟桌面归属读不到、空标题、无 AUMID。
+    /// 这正是本机每块显示器一个、整屏尺寸的 <c>ApplicationFrameWindow</c>（explorer.exe 持有）。
+    /// </summary>
+    [Fact]
+    public void Shell_cloaked_task_without_any_restorable_context_is_excluded()
+    {
+        var window = TaskWindow() with
+        {
+            Title = "",
+            AppUserModelId = "",
+            ClassName = "ApplicationFrameWindow",
+            IsCloaked = true,
+            CloakState = 2
+        };
+        var unknown = new VirtualDesktopCaptureResult(VirtualDesktopAssociationStatus.Unavailable);
+
+        Assert.True(ShellSurfaceFilter.IsShellSurface(window, unknown));
+        foreach (var policy in new[] { WindowCandidatePolicy.CaptureCandidate, WindowCandidatePolicy.RestoreMatchCandidate })
+            Assert.False(WindowCapturePolicy.IncludesShellCloakedTask(window, policy, unknown));
+    }
+
+    /// <summary>只要还能说出标题或 AUMID，就仍然当作用户的窗口保留。</summary>
+    [Theory]
+    [InlineData("", "Microsoft.Windows.Explorer")]
+    [InlineData("随机过程 - 文件资源管理器", "")]
+    public void Shell_cloaked_task_with_restorable_context_is_retained(string title, string aumid)
+    {
+        var window = TaskWindow() with
+        {
+            Title = title,
+            AppUserModelId = aumid,
+            ClassName = "ApplicationFrameWindow",
+            IsCloaked = true,
+            CloakState = 2
+        };
+        var unknown = new VirtualDesktopCaptureResult(VirtualDesktopAssociationStatus.Unavailable);
+
+        Assert.False(ShellSurfaceFilter.IsShellSurface(window, unknown));
+        Assert.True(WindowCapturePolicy.IncludesShellCloakedTask(
+            window, WindowCandidatePolicy.CaptureCandidate, unknown));
+    }
+
+    /// <summary>普通（未被 Shell 隐藏的）无标题窗口走标准判定，不受这道门槛影响。</summary>
+    [Fact]
+    public void Ordinary_untitled_task_is_unaffected_by_the_shell_surface_gate()
+    {
+        var window = TaskWindow() with { Title = "" };
+        Assert.False(ShellSurfaceFilter.IsShellSurface(
+            window, new VirtualDesktopCaptureResult(VirtualDesktopAssociationStatus.Unavailable)));
+        Assert.True(WindowPolicyEvaluator.Includes(window, WindowCandidatePolicy.CaptureCandidate));
+    }
+
     [Fact]
     public void Untitled_tasks_are_captured_without_expanding_destructive_policies()
     {
